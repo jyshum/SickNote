@@ -64,9 +64,9 @@ export default function RecordButton({ onRecorded, disabled }: RecordButtonProps
 
   if (state === "unsupported") {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-8 text-center opacity-60">
-        <Mic className="mb-2 h-8 w-8 text-slate-400" />
-        <p className="text-sm text-slate-500">Microphone not available</p>
+      <div className="flex items-center justify-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-6 py-4 text-sm text-slate-500">
+        <Mic className="h-4 w-4 text-slate-400" />
+        Microphone unavailable — upload an audio file instead.
       </div>
     );
   }
@@ -75,14 +75,19 @@ export default function RecordButton({ onRecorded, disabled }: RecordButtonProps
     return (
       <button
         onClick={stopRecording}
-        className="flex flex-col items-center justify-center rounded-xl border-2 border-red-300 bg-red-50 p-8 text-center transition-colors hover:bg-red-100"
+        className="flex w-full items-center justify-center gap-4 rounded-full border border-red-200 bg-[var(--brand-red-light)] px-6 py-4 transition duration-300 hover:bg-red-100 active:scale-[0.99]"
       >
-        <div className="animate-pulse-recording mb-2 h-4 w-4 rounded-full bg-red-500" />
-        <Square className="mb-1 h-6 w-6 text-red-600" />
-        <p className="text-sm font-semibold text-red-700">Stop</p>
-        <p className="mt-1 text-xs tabular-nums text-red-500">
-          {Math.floor(elapsed / 60)}:{(elapsed % 60).toString().padStart(2, "0")}
-        </p>
+        <span className="animate-pulse-recording h-3 w-3 rounded-full bg-[var(--brand-red)]" />
+        <span className="font-[family-name:var(--font-mono)] text-sm font-semibold tabular-nums text-[var(--brand-red)]">
+          {Math.floor(elapsed / 60)}:
+          {(elapsed % 60).toString().padStart(2, "0")}
+        </span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-red)] text-white">
+          <Square className="h-3.5 w-3.5" />
+        </span>
+        <span className="text-sm font-semibold text-red-800">
+          Stop recording
+        </span>
       </button>
     );
   }
@@ -91,11 +96,10 @@ export default function RecordButton({ onRecorded, disabled }: RecordButtonProps
     <button
       onClick={startRecording}
       disabled={disabled}
-      className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-8 text-center transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
+      className="group flex w-full items-center justify-center gap-3 rounded-full bg-[var(--brand-red)] px-8 py-4 text-base font-semibold text-white shadow-[0_16px_48px_-12px_rgba(214,40,40,0.4)] transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--brand-red-hover)] active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
     >
-      <Mic className="mb-2 h-8 w-8 text-slate-700" />
-      <p className="text-sm font-semibold text-slate-700">Record</p>
-      <p className="mt-1 text-xs text-slate-400">Click to start</p>
+      <Mic className="h-5 w-5" />
+      Record cough
     </button>
   );
 }

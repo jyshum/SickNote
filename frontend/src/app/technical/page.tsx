@@ -2,11 +2,14 @@ import { Database, Filter, Tag, AudioWaveform, BarChart3, AlertCircle, Cpu, Flas
 
 export default function TechnicalPage() {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="bg-[#f7f9fb]">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
       {/* Hero */}
-      <div className="mb-12 rounded-2xl bg-gradient-to-br from-[var(--navy)] to-[var(--navy-light)] px-8 py-10 text-center">
-        <h1 className="text-2xl font-bold text-white">How SickNote Works</h1>
-        <p className="mt-2 text-sm text-slate-300">
+      <div className="mb-10 rounded-[2rem] bg-slate-950 px-6 py-8 text-left shadow-[0_24px_80px_-48px_rgba(15,23,42,0.85)] sm:px-8 sm:py-10">
+        <h1 className="max-w-2xl text-3xl font-semibold leading-none tracking-tight text-white sm:text-4xl">
+          How SickNote works
+        </h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
           The machine learning behind cough screening
         </p>
       </div>
@@ -35,21 +38,21 @@ export default function TechnicalPage() {
           Of these, 2,841 were reviewed by four expert physicians who provided
           diagnostic labels.
         </p>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-lg border border-slate-200 p-4 text-center">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-2xl font-bold text-slate-900">34,400</p>
             <p className="text-xs text-slate-500">Total recordings</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-4 text-center">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-2xl font-bold text-slate-900">2,841</p>
             <p className="text-xs text-slate-500">Expert-labeled</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-4 text-center">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-2xl font-bold text-slate-900">~2,300</p>
             <p className="text-xs text-slate-500">After filtering</p>
           </div>
         </div>
-        <div className="mt-4 rounded-lg border border-slate-200 p-4">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
           <p className="mb-2 text-sm font-semibold text-slate-700">Filtering Criteria</p>
           <ul className="space-y-1 text-sm text-slate-600">
             <li>Cough detection confidence &gt; 0.8</li>
@@ -58,7 +61,7 @@ export default function TechnicalPage() {
           </ul>
           <div className="mt-4">
             <p className="mb-1 text-sm font-semibold text-slate-700">Class Distribution</p>
-            <div className="flex h-6 overflow-hidden rounded-full">
+            <div className="flex h-7 overflow-hidden rounded-full">
               <div className="flex items-center justify-center bg-amber-500" style={{ width: "78%" }}>
                 <span className="text-xs font-medium text-white">78% abnormal</span>
               </div>
@@ -76,7 +79,7 @@ export default function TechnicalPage() {
           <FlaskConical className="h-5 w-5 text-[var(--green)]" />
           <h2 className="text-xl font-bold text-slate-900">Processing Pipeline</h2>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-slate-200 p-6">
+        <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[repeat(11,minmax(0,auto))] sm:items-center sm:justify-center sm:p-6">
           {[
             { icon: AudioWaveform, label: "Raw Audio" },
             { icon: Filter, label: "Filter" },
@@ -85,12 +88,12 @@ export default function TechnicalPage() {
             { icon: Cpu, label: "Normalize" },
             { icon: Database, label: "Split" },
           ].map((step, i) => (
-            <div key={step.label} className="flex items-center gap-2">
-              <div className="flex flex-col items-center rounded-lg bg-slate-50 px-4 py-3">
+            <div key={step.label} className="contents">
+              <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 sm:flex-col sm:gap-1">
                 <step.icon className="mb-1 h-5 w-5 text-slate-600" />
                 <span className="text-xs font-medium text-slate-700">{step.label}</span>
               </div>
-              {i < 5 && <span className="text-slate-300">→</span>}
+              {i < 5 && <span className="hidden text-slate-300 sm:block">→</span>}
             </div>
           ))}
         </div>
@@ -109,14 +112,14 @@ export default function TechnicalPage() {
           the audio classification problem into an image classification problem,
           allowing standard computer vision techniques to apply.
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-lg border border-slate-200 p-4 text-center">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center">
             <div className="mb-2 flex h-24 items-center justify-center rounded bg-slate-900">
               <span className="text-xs text-slate-500">Healthy spectrogram placeholder</span>
             </div>
             <p className="text-sm font-medium text-emerald-600">Healthy Cough</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-4 text-center">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center">
             <div className="mb-2 flex h-24 items-center justify-center rounded bg-slate-900">
               <span className="text-xs text-slate-500">Abnormal spectrogram placeholder</span>
             </div>
@@ -140,7 +143,7 @@ export default function TechnicalPage() {
           images through three convolutional blocks, then classifies via two fully
           connected layers.
         </p>
-        <div className="rounded-lg border border-slate-200 p-4">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4">
           <div className="space-y-2 font-mono text-sm text-slate-700">
             <p>Input: (1, 64, T) mel spectrogram</p>
             <p>&nbsp;&nbsp;→ Conv2d(16) + BatchNorm + ReLU + MaxPool</p>
@@ -151,20 +154,20 @@ export default function TechnicalPage() {
             <p>&nbsp;&nbsp;→ Linear(1) → logit</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-          <div className="rounded-lg border border-slate-200 p-3">
+        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
             <p className="font-semibold text-slate-700">Loss Function</p>
             <p className="text-slate-500">BCEWithLogitsLoss + pos_weight</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
             <p className="font-semibold text-slate-700">Optimizer</p>
             <p className="text-slate-500">Adam (lr=1e-3, wd=1e-4)</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
             <p className="font-semibold text-slate-700">Checkpoint</p>
             <p className="text-slate-500">Best val_AUC + early stopping</p>
           </div>
-          <div className="rounded-lg border border-slate-200 p-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
             <p className="font-semibold text-slate-700">Hardware</p>
             <p className="text-slate-500">Apple M2 MPS backend</p>
           </div>
@@ -177,7 +180,8 @@ export default function TechnicalPage() {
           <BarChart3 className="h-5 w-5 text-[var(--green)]" />
           <h2 className="text-xl font-bold text-slate-900">Evaluation Results</h2>
         </div>
-        <table className="w-full rounded-lg border border-slate-200 text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table className="w-full min-w-[34rem] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Metric</th>
@@ -202,6 +206,7 @@ export default function TechnicalPage() {
             ))}
           </tbody>
         </table>
+        </div>
         <p className="mt-2 text-center text-xs text-slate-400">
           Actual results will be filled in after model training and evaluation.
         </p>
@@ -223,6 +228,7 @@ export default function TechnicalPage() {
           <li>Screening tool only — not a diagnostic</li>
         </ul>
       </section>
+    </div>
     </div>
   );
 }

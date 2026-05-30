@@ -1,24 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --brand-red: #d62828;
+  --brand-red-hover: #b91c1c;
+  --brand-red-light: #fef2f2;
   --green: #059669;
   --amber: #d97706;
-  --navy: #0f172a;
-  --navy-light: #1e3a5f;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display), Georgia, serif;
 }
 
 @keyframes pulse-recording {
