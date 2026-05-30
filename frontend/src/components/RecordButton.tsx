@@ -9,21 +9,28 @@ interface RecordButtonProps {
 }
 
 export default function RecordButton({ onRecorded, disabled }: RecordButtonProps) {
-  const [state, setState] = useState<"idle" | "recording" | "unsupported">("idle");
+  const [state, setState] = useState<"idle" | "recording" | "unsupported">(() =>
+    typeof navigator !== "undefined" && !navigator.mediaDevices
+      ? "unsupported"
+      : "idle"
+  );
   const [elapsed, setElapsed] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (typeof navigator !== "undefined" && !navigator.mediaDevices) {
-      setState("unsupported");
-    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
   }, []);
 
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
       chunks.current = [];
 

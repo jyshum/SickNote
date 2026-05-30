@@ -36,6 +36,7 @@ export default function ResultCard({ result }: ResultCardProps) {
 
       {result.spectrogram && (
         <div className="overflow-hidden rounded-lg bg-slate-900">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={result.spectrogram}
             alt="Mel spectrogram of analyzed cough"

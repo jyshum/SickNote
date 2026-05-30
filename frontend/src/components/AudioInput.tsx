@@ -24,14 +24,16 @@ export default function AudioInput({ onAudioReady, disabled }: AudioInputProps) 
     <div className="grid grid-cols-2 gap-4">
       <RecordButton onRecorded={onAudioReady} disabled={disabled} />
 
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={disabled}
-        className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-8 text-center transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
-      >
-        <Upload className="mb-2 h-8 w-8 text-slate-700" />
-        <p className="text-sm font-semibold text-slate-700">Upload</p>
-        <p className="mt-1 text-xs text-slate-400">.webm, .wav, .ogg, .mp3</p>
+      <div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          className="flex w-full flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-8 text-center transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Upload className="mb-2 h-8 w-8 text-slate-700" />
+          <p className="text-sm font-semibold text-slate-700">Upload</p>
+          <p className="mt-1 text-xs text-slate-400">.webm, .wav, .ogg, .mp3</p>
+        </button>
         <input
           ref={fileInputRef}
           type="file"
@@ -39,7 +41,7 @@ export default function AudioInput({ onAudioReady, disabled }: AudioInputProps) 
           onChange={handleFileChange}
           className="hidden"
         />
-      </button>
+      </div>
     </div>
   );
 }
