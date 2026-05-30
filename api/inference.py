@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 import torch
 import torchaudio
 
-# Model and params are cached at module level -- loaded once, not per request.
-_model = None
+# Models and params are cached at module level -- loaded once, not per request.
+_models = None
 _params = None
 
 # Resolve checkpoint paths relative to project root
@@ -28,36 +28,47 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CHECKPOINT_DIR = os.path.join(_PROJECT_ROOT, "model", "checkpoints")
 
 
-def _load_model():
-    """Load model_final.pt and preprocessing_params.pt.
+def _load_models():
+    """Load ensemble models (or single model_final.pt as fallback).
 
-    Uses weights_only=True and map_location='cpu' per ARCHITECTURE.md.
+    Checks for model_final_0.pt through model_final_4.pt first (ensemble).
+    Falls back to model_final.pt if no ensemble files exist.
     Caches result in module-level globals so it only runs once.
     """
-    global _model, _params
+    global _models, _params
 
-    if _model is not None:
-        return _model, _params
+    if _models is not None:
+        return _models, _params
 
     from model.architecture import SickNoteCNN
 
-    # Load preprocessing params
     params_path = os.path.join(_CHECKPOINT_DIR, "preprocessing_params.pt")
     params = torch.load(params_path, weights_only=True, map_location="cpu")
 
-    # Build model with correct dimensions and load weights
-    model = SickNoteCNN(n_mels=params["n_mels"], time_frames=params["time_frames"])
-    state_dict = torch.load(
-        os.path.join(_CHECKPOINT_DIR, "model_final.pt"),
-        weights_only=True,
-        map_location="cpu",
-    )
-    model.load_state_dict(state_dict)
-    model.eval()
+    n_mels = params["n_mels"]
+    time_frames = params["time_frames"]
 
-    _model = model
+    # Try loading ensemble members
+    models = []
+    for i in range(5):
+        path = os.path.join(_CHECKPOINT_DIR, f"model_final_{i}.pt")
+        if os.path.exists(path):
+            model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+            model.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
+            model.eval()
+            models.append(model)
+
+    # Fallback to single model
+    if not models:
+        single_path = os.path.join(_CHECKPOINT_DIR, "model_final.pt")
+        model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+        model.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
+        model.eval()
+        models.append(model)
+
+    _models = models
     _params = params
-    return _model, _params
+    return _models, _params
 
 
 def _audio_to_spectrogram(audio_path, params):
@@ -231,7 +242,7 @@ def predict(audio_path: str) -> dict:
             "gradcam": base64-encoded PNG string — heatmap showing model focus areas
         }
     """
-    model, params = _load_model()
+    models, params = _load_models()
 
     # Convert audio to spectrogram (normalized)
     spec_tensor = _audio_to_spectrogram(audio_path, params)
@@ -257,13 +268,16 @@ def predict(audio_path: str) -> dict:
     # Add batch dimension: (1, n_mels, time_frames) -> (1, 1, n_mels, time_frames)
     input_tensor = spec_tensor.unsqueeze(0) if spec_tensor.dim() == 3 else spec_tensor
 
-    # Compute Grad-CAM (needs gradients, so done before no_grad block)
-    cam = _compute_gradcam(model, input_tensor)
+    # Compute Grad-CAM from the first model (representative of ensemble focus)
+    cam = _compute_gradcam(models[0], input_tensor)
 
-    # Run inference for the actual prediction
+    # Run ensemble inference — average probabilities across all models
     with torch.no_grad():
-        logits = model(input_tensor)
-        prob = torch.sigmoid(logits).item()
+        probs = []
+        for model in models:
+            logits = model(input_tensor)
+            probs.append(torch.sigmoid(logits).item())
+        prob = sum(probs) / len(probs)
 
     # Determine label and confidence
     # prob = P(abnormal) since label 1 = abnormal
@@ -283,4 +297,5 @@ def predict(audio_path: str) -> dict:
         "confidence": round(float(confidence), 4),
         "spectrogram": spectrogram_b64,
         "gradcam": gradcam_b64,
+        "ensemble_size": len(models),
     }

@@ -20,16 +20,16 @@ from model.dataset import CoughDataset
 from model.architecture import SickNoteCNN
 
 
-def main():
-    """Train SickNoteCNN with BCEWithLogitsLoss + pos_weight.
+def train_single(seed=42, suffix=""):
+    """Train one SickNoteCNN model with a given seed.
 
-    - Checkpoint on best val_AUC (not val_loss)
-    - Early stopping after EARLY_STOPPING_PATIENCE epochs
-    - ReduceLROnPlateau scheduler monitoring val_AUC
-    - Save model_best.pt → model_final.pt when done
-    - Use num_workers=0 in DataLoader (MPS compatibility)
+    Returns the best val_AUC achieved. Saves checkpoint to
+    model_final{suffix}.pt (e.g. model_final_0.pt for ensemble member 0).
     """
-    torch.manual_seed(42)
+    torch.manual_seed(seed)
+    print(f"\n{'='*70}")
+    print(f"Training with seed={seed}{f' (ensemble member {suffix})' if suffix else ''}")
+    print(f"{'='*70}")
     print(f"Device: {DEVICE}")
 
     # ------------------------------------------------------------------
@@ -94,8 +94,8 @@ def main():
     # ------------------------------------------------------------------
     best_val_auc = 0.0
     patience_counter = 0
-    best_path = os.path.join(CHECKPOINT_DIR, "model_best.pt")
-    final_path = os.path.join(CHECKPOINT_DIR, "model_final.pt")
+    best_path = os.path.join(CHECKPOINT_DIR, f"model_best{suffix}.pt")
+    final_path = os.path.join(CHECKPOINT_DIR, f"model_final{suffix}.pt")
 
     for epoch in range(1, EPOCHS + 1):
         # ---- Train ----
@@ -174,6 +174,36 @@ def main():
     shutil.copy2(best_path, final_path)
     print(f"\nTraining complete. Best val_AUC: {best_val_auc:.4f}")
     print(f"Saved: {final_path}")
+    return best_val_auc
+
+
+ENSEMBLE_SEEDS = [42, 123, 456, 789, 1024]
+
+
+def main():
+    """Train a single model or an ensemble of 5 models.
+
+    Usage:
+        python -m model.train              # single model (seed=42)
+        python -m model.train --ensemble   # 5 models with different seeds
+    """
+    import sys
+
+    if "--ensemble" in sys.argv:
+        print("Training ensemble of 5 models...")
+        aucs = []
+        for i, seed in enumerate(ENSEMBLE_SEEDS):
+            auc = train_single(seed=seed, suffix=f"_{i}")
+            aucs.append(auc)
+        print(f"\n{'='*70}")
+        print(f"ENSEMBLE COMPLETE")
+        print(f"{'='*70}")
+        for i, auc in enumerate(aucs):
+            print(f"  Model {i} (seed={ENSEMBLE_SEEDS[i]}): val_AUC={auc:.4f}")
+        print(f"  Mean val_AUC: {sum(aucs)/len(aucs):.4f}")
+        print(f"  Saved: model_final_0.pt through model_final_4.pt")
+    else:
+        train_single(seed=42)
 
 
 if __name__ == "__main__":

@@ -18,23 +18,47 @@ from model.dataset import CoughDataset
 from model.architecture import SickNoteCNN
 
 
-def main():
-    """Load model_final.pt, run on test split, print metrics.
+def _load_models():
+    """Load ensemble models (or single model_final.pt as fallback)."""
+    params = torch.load(
+        os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"),
+        weights_only=True,
+    )
+    n_mels = params["n_mels"]
+    time_frames = params["time_frames"]
 
-    Must call model.eval() and use torch.no_grad().
-    Apply torch.sigmoid() to raw logits before computing metrics.
-    """
+    models = []
+    for i in range(5):
+        path = os.path.join(CHECKPOINT_DIR, f"model_final_{i}.pt")
+        if os.path.exists(path):
+            model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+            model.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
+            model.to(DEVICE)
+            model.eval()
+            models.append(model)
+
+    if not models:
+        single_path = os.path.join(CHECKPOINT_DIR, "model_final.pt")
+        model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+        model.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
+        model.to(DEVICE)
+        model.eval()
+        models.append(model)
+
+    return models, params
+
+
+def main():
+    """Load ensemble (or single model), run on test split, print metrics."""
     print("=" * 70)
     print("SickNote -- Test Set Evaluation (evaluate.py)")
     print("=" * 70)
 
     # ------------------------------------------------------------------
-    # 1. Load preprocessing params and splits
+    # 1. Load models and preprocessing params
     # ------------------------------------------------------------------
-    params = torch.load(
-        os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"),
-        weights_only=True,
-    )
+    models, params = _load_models()
+
     splits = torch.load(
         os.path.join(CHECKPOINT_DIR, "splits.pt"),
         weights_only=False,
@@ -42,32 +66,17 @@ def main():
 
     mean = params["mean"]
     std = params["std"]
-    n_mels = params["n_mels"]
-    time_frames = params["time_frames"]
 
     test_files = splits["test_files"]
     test_labels = splits["test_labels"]
 
     print(f"\nDevice: {DEVICE}")
+    print(f"Ensemble size: {len(models)}")
     print(f"Test samples: {len(test_files)}")
     print(f"  Healthy (0): {test_labels.count(0)}")
     print(f"  Abnormal (1): {test_labels.count(1)}")
     print(f"Threshold: {THRESHOLD}")
     print(f"Normalization: mean={mean:.4f}, std={std:.4f}")
-
-    # ------------------------------------------------------------------
-    # 2. Load trained model
-    # ------------------------------------------------------------------
-    model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
-    state_dict = torch.load(
-        os.path.join(CHECKPOINT_DIR, "model_final.pt"),
-        weights_only=True,
-        map_location="cpu",
-    )
-    model.load_state_dict(state_dict)
-    model.to(DEVICE)
-    model.eval()
-    print(f"Model loaded from {os.path.join(CHECKPOINT_DIR, 'model_final.pt')}")
 
     # ------------------------------------------------------------------
     # 3. Create dataset and dataloader
@@ -78,7 +87,7 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # 4. Run inference
+    # 4. Run ensemble inference — average probabilities across models
     # ------------------------------------------------------------------
     all_probs = []
     all_labels = []
@@ -86,17 +95,19 @@ def main():
     with torch.no_grad():
         for spectrograms, labels in test_loader:
             spectrograms = spectrograms.to(DEVICE)
-            logits = model(spectrograms)
-            probs = torch.sigmoid(logits).squeeze(1).cpu().tolist()
+            batch_probs = []
+            for model in models:
+                logits = model(spectrograms)
+                batch_probs.append(torch.sigmoid(logits).squeeze(1).cpu())
+            avg_probs = torch.stack(batch_probs).mean(dim=0).tolist()
             truth = labels.tolist()
 
-            # Handle single-sample batch: .tolist() returns float, not list
-            if isinstance(probs, float):
-                probs = [probs]
+            if isinstance(avg_probs, float):
+                avg_probs = [avg_probs]
             if isinstance(truth, float):
                 truth = [truth]
 
-            all_probs.extend(probs)
+            all_probs.extend(avg_probs)
             all_labels.extend(truth)
 
     # ------------------------------------------------------------------

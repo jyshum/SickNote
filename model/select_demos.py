@@ -29,7 +29,7 @@ def main():
     print("=" * 70)
 
     # ------------------------------------------------------------------
-    # 1. Load model and preprocessing params
+    # 1. Load ensemble models and preprocessing params
     # ------------------------------------------------------------------
     params = torch.load(
         os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"),
@@ -46,15 +46,25 @@ def main():
     n_mels = params["n_mels"]
     time_frames = params["time_frames"]
 
-    model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
-    state_dict = torch.load(
-        os.path.join(CHECKPOINT_DIR, "model_final.pt"),
-        weights_only=True,
-        map_location="cpu",
-    )
-    model.load_state_dict(state_dict)
-    model.to(DEVICE)
-    model.eval()
+    models = []
+    for i in range(5):
+        path = os.path.join(CHECKPOINT_DIR, f"model_final_{i}.pt")
+        if os.path.exists(path):
+            m = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+            m.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
+            m.to(DEVICE)
+            m.eval()
+            models.append(m)
+
+    if not models:
+        single_path = os.path.join(CHECKPOINT_DIR, "model_final.pt")
+        m = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+        m.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
+        m.to(DEVICE)
+        m.eval()
+        models.append(m)
+
+    print(f"Loaded {len(models)} model(s)")
 
     test_files = splits["test_files"]
     test_labels = splits["test_labels"]
@@ -74,9 +84,12 @@ def main():
     with torch.no_grad():
         for i in range(len(test_ds)):
             spec, label = test_ds[i]
-            spec = spec.unsqueeze(0).to(DEVICE)  # add batch dim
-            logit = model(spec)
-            prob = torch.sigmoid(logit).item()
+            spec = spec.unsqueeze(0).to(DEVICE)
+            probs = []
+            for m in models:
+                logit = m(spec)
+                probs.append(torch.sigmoid(logit).item())
+            prob = sum(probs) / len(probs)
             results.append((test_files[i], int(label.item()), prob))
 
     # ------------------------------------------------------------------
