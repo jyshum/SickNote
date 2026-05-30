@@ -5,8 +5,8 @@ data/demo_clips/*.webm
 data/demo_clips/*.wav
 data/demo_clips/*.ogg
 
-# Model checkpoints
-model/checkpoints/*.pt
+# Model checkpoints (keep model_final.pt and preprocessing_params.pt for P2)
+model/checkpoints/model_best.pt
 
 # Python
 __pycache__/
