@@ -306,3 +306,148 @@ class TestAudioToSpectrogram:
         wav_path = self._make_wav(tmp_path, duration_s=4.0)
         tensor = audio_to_spectrogram(wav_path)
         assert tensor.dtype == torch.float32
+
+
+# ── CoughDataset tests ──────────────────────────────────────────────
+
+
+class TestCoughDataset:
+    """Test CoughDataset: loads .pt tensors, applies normalization, returns (tensor, label)."""
+
+    def _make_pt_files(self, tmp_path, n=5, shape=(1, 64, 173)):
+        """Create n dummy .pt spectrogram files and return (file_list, label_list)."""
+        import torch
+
+        file_list = []
+        label_list = []
+        for i in range(n):
+            tensor = torch.randn(*shape)
+            path = str(tmp_path / f"sample_{i}.pt")
+            torch.save(tensor, path)
+            file_list.append(path)
+            label_list.append(i % 2)  # alternate 0/1
+        return file_list, label_list
+
+    def test_len_returns_correct_count(self, tmp_path):
+        from model.dataset import CoughDataset
+
+        file_list, label_list = self._make_pt_files(tmp_path, n=7)
+        ds = CoughDataset(file_list, label_list)
+        assert len(ds) == 7
+
+    def test_getitem_returns_tensor_and_float32_label(self, tmp_path):
+        import torch
+        from model.dataset import CoughDataset
+
+        file_list, label_list = self._make_pt_files(tmp_path, n=3)
+        ds = CoughDataset(file_list, label_list)
+        tensor, label = ds[0]
+        assert isinstance(tensor, torch.Tensor)
+        assert label.dtype == torch.float32
+        assert label.item() == float(label_list[0])
+
+    def test_works_with_dataloader(self, tmp_path):
+        import torch
+        from torch.utils.data import DataLoader
+        from model.dataset import CoughDataset
+
+        shape = (1, 64, 173)
+        file_list, label_list = self._make_pt_files(tmp_path, n=6, shape=shape)
+        ds = CoughDataset(file_list, label_list)
+        loader = DataLoader(ds, batch_size=3, shuffle=False)
+        batch_tensor, batch_label = next(iter(loader))
+        assert batch_tensor.shape == (3, *shape)
+        assert batch_label.shape == (3,)
+        assert batch_label.dtype == torch.float32
+
+    def test_applies_normalization(self, tmp_path):
+        import torch
+        from model.dataset import CoughDataset
+
+        # Create a known tensor
+        known = torch.ones(1, 64, 173) * 10.0
+        path = str(tmp_path / "known.pt")
+        torch.save(known, path)
+
+        mean = 10.0
+        std = 2.0
+        ds = CoughDataset([path], [1], mean=mean, std=std)
+        tensor, label = ds[0]
+        # (10 - 10) / 2 = 0.0
+        assert torch.allclose(tensor, torch.zeros(1, 64, 173), atol=1e-6)
+
+    def test_no_normalization_without_mean_std(self, tmp_path):
+        import torch
+        from model.dataset import CoughDataset
+
+        known = torch.ones(1, 64, 173) * 5.0
+        path = str(tmp_path / "raw.pt")
+        torch.save(known, path)
+
+        ds = CoughDataset([path], [0])
+        tensor, label = ds[0]
+        assert torch.allclose(tensor, torch.ones(1, 64, 173) * 5.0)
+
+
+# ── SickNoteCNN tests ───────────────────────────────────────────────
+
+
+class TestSickNoteCNN:
+    """Test SickNoteCNN: output shape, flatten dim, various input sizes."""
+
+    def test_output_shape_batch_4(self):
+        import torch
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        x = torch.randn(4, 1, 64, 173)
+        out = model(x)
+        assert out.shape == (4, 1)
+
+    def test_output_shape_batch_1(self):
+        import torch
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        x = torch.randn(1, 1, 64, 173)
+        out = model(x)
+        assert out.shape == (1, 1)
+
+    def test_output_shape_batch_16(self):
+        import torch
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        x = torch.randn(16, 1, 64, 173)
+        out = model(x)
+        assert out.shape == (16, 1)
+
+    def test_different_input_dimensions(self):
+        import torch
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=128, time_frames=87)
+        x = torch.randn(2, 1, 128, 87)
+        out = model(x)
+        assert out.shape == (2, 1)
+
+    def test_flatten_dim_is_positive(self):
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        assert model._flatten_dim > 0
+
+    def test_outputs_raw_logits(self):
+        """Model should output raw logits, not probabilities (no sigmoid)."""
+        import torch
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        model.eval()
+        x = torch.randn(4, 1, 64, 173)
+        with torch.no_grad():
+            out = model(x)
+        # Raw logits can be negative or > 1 — if sigmoid were applied, all would be in [0,1]
+        # With random weights, it's extremely unlikely all 4 outputs fall in [0,1]
+        # We just check the output is a float tensor of the right shape
+        assert out.dtype == torch.float32

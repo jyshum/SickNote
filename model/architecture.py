@@ -6,7 +6,10 @@ Apply torch.sigmoid() at inference time only.
 
 See ARCHITECTURE.md → Model Architecture for the full reference implementation.
 """
+import torch
 import torch.nn as nn
+
+from model import config
 
 
 class SickNoteCNN(nn.Module):
@@ -19,13 +22,40 @@ class SickNoteCNN(nn.Module):
     """
 
     def __init__(self, n_mels, time_frames):
-        raise NotImplementedError
+        super().__init__()
+        channels = config.CONV_CHANNELS  # [16, 32, 64]
+        k = config.KERNEL_SIZE           # 3
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, channels[0], k, padding=1), nn.BatchNorm2d(channels[0]),
+            nn.ReLU(), nn.MaxPool2d(2),
+
+            nn.Conv2d(channels[0], channels[1], k, padding=1), nn.BatchNorm2d(channels[1]),
+            nn.ReLU(), nn.MaxPool2d(2),
+
+            nn.Conv2d(channels[1], channels[2], k, padding=1), nn.BatchNorm2d(channels[2]),
+            nn.ReLU(), nn.MaxPool2d(2),
+        )
+        self._flatten_dim = self._get_flatten_dim(n_mels, time_frames)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self._flatten_dim, 128),
+            nn.ReLU(),
+            nn.Dropout(config.DROPOUT),
+            nn.Linear(128, 1),
+            # NO Sigmoid — use BCEWithLogitsLoss for numerical stability
+            # Apply torch.sigmoid() at inference time only
+        )
 
     def _get_flatten_dim(self, n_mels, time_frames):
         """Pass dummy tensor through conv layers to compute flatten dimension.
         Never hardcode this value."""
-        raise NotImplementedError
+        dummy = torch.zeros(1, 1, n_mels, time_frames)
+        out = self.conv(dummy)
+        return int(torch.prod(torch.tensor(out.shape[1:])))
 
     def forward(self, x):
         """Returns raw logits, shape (batch_size, 1)."""
-        raise NotImplementedError
+        x = self.conv(x)
+        x = x.view(x.size(0), -1)
+        return self.classifier(x)
