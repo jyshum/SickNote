@@ -2,8 +2,9 @@
 Raw audio → mel spectrogram tensor pipeline.
 
 Reads COUGHVID audio files, filters by expert labels and quality,
-converts to normalized log-mel spectrograms, saves as .pt tensors,
-and creates stratified train/val/test splits.
+converts to log-mel spectrograms, and saves as .pt tensors.
+Normalization (mean/std) is computed on the train split only and
+saved to preprocessing_params.pt — applied at load time by CoughDataset.
 
 See ARCHITECTURE.md → Data Pipeline for the full processing flow.
 
@@ -66,13 +67,16 @@ def load_and_filter_metadata(csv_path=None):
     # Map label to int: healthy=0, abnormal=1
     filtered["label_int"] = (filtered["label"] == "abnormal").astype(int)
 
-    # Return only the columns we need
+    filtered = filtered.drop_duplicates(subset="uuid")
     result = filtered[["uuid", "label", "label_int"]].reset_index(drop=True)
     return result
 
 
 def audio_to_spectrogram(audio_path):
     """Load audio, resample to SAMPLE_RATE, pad/trim, convert to log-mel spectrogram.
+
+    Returns raw dB values, NOT normalized. Caller must apply
+    (tensor - mean) / std using preprocessing_params.pt.
 
     Returns: torch.Tensor of shape (1, N_MELS, TIME_FRAMES)
     """
@@ -131,7 +135,8 @@ def main():
     print(f"\n[2/5] Converting audio files to spectrograms...")
     saved_files = []
     saved_labels = []
-    skipped = 0
+    missing = 0
+    errors = 0
 
     for idx, row in metadata.iterrows():
         uuid = row["uuid"]
@@ -139,7 +144,7 @@ def main():
 
         audio_path = find_audio_file(uuid, RAW_DIR)
         if audio_path is None:
-            skipped += 1
+            missing += 1
             continue
 
         try:
@@ -149,17 +154,16 @@ def main():
             saved_files.append(out_path)
             saved_labels.append(label_int)
         except Exception as e:
-            skipped += 1
-            if skipped <= 10:
+            errors += 1
+            if errors <= 10:
                 print(f"  SKIP {uuid}: {e}")
 
-        # Progress indicator
-        total_done = len(saved_files) + skipped
+        total_done = len(saved_files) + missing + errors
         if total_done % 200 == 0:
             print(f"  Processed {total_done}/{len(metadata)} "
-                  f"(saved: {len(saved_files)}, skipped: {skipped})")
+                  f"(saved: {len(saved_files)}, missing: {missing}, errors: {errors})")
 
-    print(f"  Done. Saved: {len(saved_files)}, Skipped: {skipped}")
+    print(f"  Done. Saved: {len(saved_files)}, Missing: {missing}, Errors: {errors}")
 
     # ── Step 3: Stratified 70/15/15 split ─────────────────────────────
     print(f"\n[3/5] Creating stratified 70/15/15 splits...")
@@ -192,7 +196,7 @@ def main():
     # ── Step 4: Compute normalization mean/std on TRAIN ONLY ──────────
     print(f"\n[4/5] Computing normalization stats on train split only...")
 
-    # Accumulate statistics using Welford's online algorithm for numerical stability
+    # Accumulate sum and sum-of-squares for online variance: var = E[X²] - E[X]²
     n_pixels = 0
     running_sum = 0.0
     running_sq_sum = 0.0
@@ -247,7 +251,8 @@ def main():
     print("PREPROCESSING COMPLETE")
     print("=" * 70)
     print(f"  Total spectrograms: {len(saved_files)}")
-    print(f"  Skipped:            {skipped}")
+    print(f"  Missing:            {missing}")
+    print(f"  Errors:             {errors}")
     print(f"  Train/Val/Test:     {len(train_files)}/{len(val_files)}/{len(test_files)}")
     print(f"  Train mean:         {train_mean:.4f}")
     print(f"  Train std:          {train_std:.4f}")

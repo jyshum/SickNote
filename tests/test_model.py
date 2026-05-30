@@ -262,15 +262,17 @@ class TestAudioToSpectrogram:
         assert tensor.shape[2] == expected_time
 
     def test_short_clip_is_padded(self, tmp_path):
-        """A clip shorter than CLIP_LENGTH_S should be zero-padded."""
+        """A clip shorter than CLIP_LENGTH_S should be zero-padded to same shape."""
         from model.preprocess import audio_to_spectrogram
-        from model.config import N_MELS
+        from model.config import N_MELS, SAMPLE_RATE, CLIP_LENGTH_S, HOP_LENGTH
 
         wav_path = self._make_wav(tmp_path, filename="short.wav", duration_s=1.0)
         tensor = audio_to_spectrogram(wav_path)
         assert tensor.ndim == 3
         assert tensor.shape[0] == 1
         assert tensor.shape[1] == N_MELS
+        expected_time = int(SAMPLE_RATE * CLIP_LENGTH_S) // HOP_LENGTH + 1
+        assert tensor.shape[2] == expected_time
 
     def test_long_clip_is_trimmed(self, tmp_path):
         """A clip longer than CLIP_LENGTH_S should be trimmed."""
