@@ -90,7 +90,7 @@ def _load_audio_ffmpeg(audio_path, target_sr=None):
         "-v", "quiet",
         "pipe:1",
     ]
-    result = subprocess.run(cmd, capture_output=True)
+    result = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise RuntimeError(
             f"ffmpeg failed on {audio_path}: {result.stderr.decode(errors='replace')}"
@@ -113,7 +113,7 @@ def _get_duration_ffmpeg(audio_path, sr=22050):
         "-v", "quiet",
         "pipe:1",
     ]
-    result = subprocess.run(cmd, capture_output=True)
+    result = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed on {audio_path}")
     num_samples = len(result.stdout) // 4  # 4 bytes per float32
@@ -208,11 +208,15 @@ def main():
     durations = np.array(durations)
     print(f"  Clips with audio found: {len(durations)}")
     print(f"  Missing/unreadable audio: {missing_audio}")
-    print(f"\n  Median:  {np.median(durations):.2f}s")
-    print(f"  P10:     {np.percentile(durations, 10):.2f}s")
-    print(f"  P90:     {np.percentile(durations, 90):.2f}s")
-    print(f"  Min:     {np.min(durations):.2f}s")
-    print(f"  Max:     {np.max(durations):.2f}s")
+
+    if len(durations) == 0:
+        print("\n  No audio durations collected — skipping stats.")
+    else:
+        print(f"\n  Median:  {np.median(durations):.2f}s")
+        print(f"  P10:     {np.percentile(durations, 10):.2f}s")
+        print(f"  P90:     {np.percentile(durations, 90):.2f}s")
+        print(f"  Min:     {np.min(durations):.2f}s")
+        print(f"  Max:     {np.max(durations):.2f}s")
 
     # ── Q4: Plot spectrograms ─────────────────────────────────────────
     print("\n" + "─" * 70)
