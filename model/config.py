@@ -1,17 +1,18 @@
 """
-All hyperparameters. Values marked * MUST be verified after running explore.py.
+All hyperparameters — verified by explore.py on 2026-05-30.
 See ARCHITECTURE.md → Config section for full documentation.
 """
+import torch
 
 # Audio
 SAMPLE_RATE = 22050
-CLIP_LENGTH_S = 4          # * verify against duration distribution
-N_MELS = 64                # * adjust after visualizing spectrograms
-N_FFT = 1024               # * adjust if time resolution looks wrong
-HOP_LENGTH = 512           # * adjust if frequency resolution looks wrong
+CLIP_LENGTH_S = 4
+N_MELS = 64
+N_FFT = 1024
+HOP_LENGTH = 512
 
 # Training
-BATCH_SIZE = 32            # * lower to 16 if <1500 usable samples
+BATCH_SIZE = 32
 EPOCHS = 30
 LR = 1e-3
 WEIGHT_DECAY = 1e-4
@@ -19,11 +20,14 @@ DROPOUT = 0.3
 EARLY_STOPPING_PATIENCE = 5
 
 # Model
-CONV_CHANNELS = [16, 32, 64]   # * reduce to [8, 16, 32] if overfitting
+CONV_CHANNELS = [16, 32, 64]
 KERNEL_SIZE = 3
 
 # Evaluation
 THRESHOLD = 0.5
+
+# Device
+DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 # Paths
 RAW_DIR = "data/raw/coughvid_20211012"
