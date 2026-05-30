@@ -1,0 +1,10 @@
+torch>=2.2
+torchaudio>=2.2
+pandas
+numpy
+Pillow
+matplotlib
+scikit-learn
+fastapi
+uvicorn[standard]
+python-multipart
