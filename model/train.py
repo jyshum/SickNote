@@ -29,6 +29,7 @@ def main():
     - Save model_best.pt → model_final.pt when done
     - Use num_workers=0 in DataLoader (MPS compatibility)
     """
+    torch.manual_seed(42)
     print(f"Device: {DEVICE}")
 
     # ------------------------------------------------------------------
@@ -82,7 +83,7 @@ def main():
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", patience=2, factor=0.5
+        optimizer, mode="max", patience=5, factor=0.5
     )
 
     total_params = sum(p.numel() for p in model.parameters())
