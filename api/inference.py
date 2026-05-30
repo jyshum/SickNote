@@ -107,6 +107,85 @@ def _audio_to_spectrogram(audio_path, params):
     return mel_normalized
 
 
+def _compute_gradcam(model, input_tensor):
+    """Compute Grad-CAM heatmap showing which spectrogram regions drove the prediction.
+
+    Hooks into the last conv block, computes gradient-weighted activation maps,
+    and returns a heatmap array resized to the input spectrogram dimensions.
+    """
+    activations = []
+    gradients = []
+
+    def fwd_hook(module, inp, out):
+        activations.append(out.detach())
+
+    def bwd_hook(module, grad_in, grad_out):
+        gradients.append(grad_out[0].detach())
+
+    handle_fwd = model.conv.register_forward_hook(fwd_hook)
+    handle_bwd = model.conv.register_full_backward_hook(bwd_hook)
+
+    input_copy = input_tensor.clone().requires_grad_(True)
+    logits = model(input_copy)
+
+    model.zero_grad()
+    logits.backward()
+
+    handle_fwd.remove()
+    handle_bwd.remove()
+
+    grads = gradients[0]
+    acts = activations[0]
+
+    weights = grads.mean(dim=(2, 3), keepdim=True)
+    cam = (weights * acts).sum(dim=1, keepdim=True)
+    cam = torch.relu(cam)
+
+    cam = cam.squeeze()
+    if cam.max() > 0:
+        cam = cam / cam.max()
+
+    cam = torch.nn.functional.interpolate(
+        cam.unsqueeze(0).unsqueeze(0),
+        size=(input_tensor.shape[2], input_tensor.shape[3]),
+        mode="bilinear",
+        align_corners=False,
+    ).squeeze()
+
+    return cam.numpy()
+
+
+def _gradcam_to_base64(spec_tensor, cam_array):
+    """Overlay Grad-CAM heatmap on the spectrogram and return as base64 PNG."""
+    import numpy as np
+
+    fig, ax = plt.subplots(1, 1, figsize=(6, 2.5))
+    ax.imshow(
+        spec_tensor.squeeze().numpy(),
+        aspect="auto",
+        origin="lower",
+        cmap="gray",
+    )
+    ax.imshow(
+        cam_array,
+        aspect="auto",
+        origin="lower",
+        cmap="jet",
+        alpha=0.5,
+    )
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Mel bin")
+    ax.set_title("Model Focus Areas (Grad-CAM)")
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
+
+
 def _spectrogram_to_base64(spec_tensor):
     """Render spectrogram tensor as a matplotlib figure and return base64 PNG.
 
@@ -148,7 +227,8 @@ def predict(audio_path: str) -> dict:
         {
             "label": "healthy" or "abnormal",
             "confidence": float between 0.0 and 1.0,
-            "spectrogram": base64-encoded PNG string ("data:image/png;base64,...")
+            "spectrogram": base64-encoded PNG string ("data:image/png;base64,..."),
+            "gradcam": base64-encoded PNG string — heatmap showing model focus areas
         }
     """
     model, params = _load_model()
@@ -174,10 +254,14 @@ def predict(audio_path: str) -> dict:
     amp_to_db = torchaudio.transforms.AmplitudeToDB()
     raw_spec = amp_to_db(mel_transform(waveform))
 
-    # Run inference: model.eval() already called in _load_model()
+    # Add batch dimension: (1, n_mels, time_frames) -> (1, 1, n_mels, time_frames)
+    input_tensor = spec_tensor.unsqueeze(0) if spec_tensor.dim() == 3 else spec_tensor
+
+    # Compute Grad-CAM (needs gradients, so done before no_grad block)
+    cam = _compute_gradcam(model, input_tensor)
+
+    # Run inference for the actual prediction
     with torch.no_grad():
-        # Add batch dimension: (1, n_mels, time_frames) -> (1, 1, n_mels, time_frames)
-        input_tensor = spec_tensor.unsqueeze(0) if spec_tensor.dim() == 3 else spec_tensor
         logits = model(input_tensor)
         prob = torch.sigmoid(logits).item()
 
@@ -190,11 +274,13 @@ def predict(audio_path: str) -> dict:
         label = "healthy"
         confidence = 1.0 - prob
 
-    # Generate spectrogram image from raw (unnormalized) dB values
+    # Generate visualizations
     spectrogram_b64 = _spectrogram_to_base64(raw_spec)
+    gradcam_b64 = _gradcam_to_base64(raw_spec, cam)
 
     return {
         "label": label,
         "confidence": round(float(confidence), 4),
         "spectrogram": spectrogram_b64,
+        "gradcam": gradcam_b64,
     }
