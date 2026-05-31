@@ -1,7 +1,9 @@
 """
 Training loop with early stopping on val_AUC.
 
-See ARCHITECTURE.md → P1 Step 3 for requirements.
+Two-phase transfer learning:
+  Phase 1 (frozen backbone): train classifier head only
+  Phase 2 (fine-tuning): unfreeze all, differential learning rates
 
 Usage: PYTORCH_ENABLE_MPS_FALLBACK=1 python -m model.train
 """
@@ -13,18 +15,54 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import roc_auc_score
 
 from model.config import (
-    BATCH_SIZE, EPOCHS, LR, WEIGHT_DECAY,
+    BATCH_SIZE, EPOCHS, WEIGHT_DECAY,
     EARLY_STOPPING_PATIENCE, CHECKPOINT_DIR, DEVICE,
+    LR_BACKBONE, LR_HEAD, FREEZE_EPOCHS,
 )
 from model.dataset import CoughDataset
-from model.architecture import SickNoteCNN
+from model.architecture import SickNoteResNet
+
+
+ENSEMBLE_SEEDS = [42, 123, 456]
+
+
+def _validate(model, val_loader, criterion, val_ds, device):
+    """Run validation pass, return (val_loss, val_auc)."""
+    model.eval()
+    val_running_loss = 0.0
+    all_probs = []
+    all_labels = []
+
+    with torch.no_grad():
+        for spectrograms, labels in val_loader:
+            spectrograms = spectrograms.to(device)
+            labels_dev = labels.unsqueeze(1).to(device)
+
+            logits = model(spectrograms)
+            loss = criterion(logits, labels_dev)
+            val_running_loss += loss.item() * spectrograms.size(0)
+
+            probs = torch.sigmoid(logits).squeeze(1).cpu().tolist()
+            truth = labels.tolist()
+
+            if isinstance(probs, float):
+                probs = [probs]
+            if isinstance(truth, float):
+                truth = [truth]
+
+            all_probs.extend(probs)
+            all_labels.extend(truth)
+
+    val_loss = val_running_loss / len(val_ds)
+    val_auc = roc_auc_score(all_labels, all_probs)
+    return val_loss, val_auc
 
 
 def train_single(seed=42, suffix=""):
-    """Train one SickNoteCNN model with a given seed.
+    """Train one SickNoteResNet model with a given seed.
 
-    Returns the best val_AUC achieved. Saves checkpoint to
-    model_final{suffix}.pt (e.g. model_final_0.pt for ensemble member 0).
+    Phase 1: frozen backbone, train head only at LR_HEAD.
+    Phase 2: unfreeze all, backbone at LR_BACKBONE, head at LR_HEAD.
     """
     torch.manual_seed(seed)
     print(f"\n{'='*70}")
@@ -49,11 +87,8 @@ def train_single(seed=42, suffix=""):
 
     mean = params["mean"]
     std = params["std"]
-    n_mels = params["n_mels"]
-    time_frames = params["time_frames"]
 
     print(f"Train: {len(train_files)} samples | Val: {len(val_files)} samples")
-    print(f"n_mels={n_mels}, time_frames={time_frames}, mean={mean:.2f}, std={std:.2f}")
 
     # ------------------------------------------------------------------
     # 2. Create datasets and dataloaders
@@ -71,23 +106,21 @@ def train_single(seed=42, suffix=""):
     # ------------------------------------------------------------------
     # 3. Compute pos_weight for class imbalance
     # ------------------------------------------------------------------
-    n_pos = sum(train_labels)           # abnormal = 1
-    n_neg = len(train_labels) - n_pos   # healthy = 0
+    n_pos = sum(train_labels)
+    n_neg = len(train_labels) - n_pos
     pos_weight = torch.tensor([n_neg / n_pos], dtype=torch.float32).to(DEVICE)
     print(f"Class balance — healthy(0): {n_neg}, abnormal(1): {n_pos}, pos_weight: {pos_weight.item():.4f}")
 
     # ------------------------------------------------------------------
-    # 4. Model, loss, optimizer, scheduler
+    # 4. Model, loss
     # ------------------------------------------------------------------
-    model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames).to(DEVICE)
+    model = SickNoteResNet().to(DEVICE)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", patience=5, factor=0.5
-    )
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Model parameters: {total_params:,}")
+    trainable_head = sum(p.numel() for p in model.head_params())
+    print(f"Total parameters: {total_params:,}")
+    print(f"Head parameters: {trainable_head:,}")
 
     # ------------------------------------------------------------------
     # 5. Training loop
@@ -97,13 +130,42 @@ def train_single(seed=42, suffix=""):
     best_path = os.path.join(CHECKPOINT_DIR, f"model_best{suffix}.pt")
     final_path = os.path.join(CHECKPOINT_DIR, f"model_final{suffix}.pt")
 
+    # Phase 1: freeze backbone
+    for param in model.backbone_params():
+        param.requires_grad = False
+
+    optimizer = torch.optim.Adam(
+        model.head_params(), lr=LR_HEAD, weight_decay=WEIGHT_DECAY
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", patience=3, factor=0.5
+    )
+
+    phase = 1
+    print(f"\n--- Phase 1: Frozen backbone (epochs 1-{FREEZE_EPOCHS}) ---")
+
     for epoch in range(1, EPOCHS + 1):
+        # Switch to phase 2 after FREEZE_EPOCHS
+        if epoch == FREEZE_EPOCHS + 1:
+            phase = 2
+            print(f"\n--- Phase 2: Fine-tuning all layers (epochs {epoch}-{EPOCHS}) ---")
+            for param in model.backbone_params():
+                param.requires_grad = True
+            optimizer = torch.optim.Adam([
+                {"params": model.backbone_params(), "lr": LR_BACKBONE},
+                {"params": model.head_params(), "lr": LR_HEAD},
+            ], weight_decay=WEIGHT_DECAY)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="max", patience=3, factor=0.5
+            )
+            patience_counter = 0
+
         # ---- Train ----
         model.train()
         running_loss = 0.0
         for spectrograms, labels in train_loader:
             spectrograms = spectrograms.to(DEVICE)
-            labels = labels.unsqueeze(1).to(DEVICE)  # (batch,) → (batch, 1)
+            labels = labels.unsqueeze(1).to(DEVICE)
 
             optimizer.zero_grad()
             logits = model(spectrograms)
@@ -116,40 +178,13 @@ def train_single(seed=42, suffix=""):
         train_loss = running_loss / len(train_ds)
 
         # ---- Validate ----
-        model.eval()
-        val_running_loss = 0.0
-        all_probs = []
-        all_labels = []
-
-        with torch.no_grad():
-            for spectrograms, labels in val_loader:
-                spectrograms = spectrograms.to(DEVICE)
-                labels_dev = labels.unsqueeze(1).to(DEVICE)
-
-                logits = model(spectrograms)
-                loss = criterion(logits, labels_dev)
-                val_running_loss += loss.item() * spectrograms.size(0)
-
-                probs = torch.sigmoid(logits).squeeze(1).cpu().tolist()
-                truth = labels.tolist()
-
-                # Handle single-sample batch: .tolist() returns float, not list
-                if isinstance(probs, float):
-                    probs = [probs]
-                if isinstance(truth, float):
-                    truth = [truth]
-
-                all_probs.extend(probs)
-                all_labels.extend(truth)
-
-        val_loss = val_running_loss / len(val_ds)
-        val_auc = roc_auc_score(all_labels, all_probs)
-        current_lr = optimizer.param_groups[0]["lr"]
+        val_loss, val_auc = _validate(model, val_loader, criterion, val_ds, DEVICE)
+        current_lr = optimizer.param_groups[-1]["lr"]
 
         scheduler.step(val_auc)
 
         print(
-            f"Epoch {epoch:02d}/{EPOCHS} | "
+            f"Epoch {epoch:02d}/{EPOCHS} [P{phase}] | "
             f"train_loss: {train_loss:.4f} | "
             f"val_loss: {val_loss:.4f} | "
             f"val_AUC: {val_auc:.4f} | "
@@ -164,7 +199,7 @@ def train_single(seed=42, suffix=""):
             print(f"  ✓ New best val_AUC — checkpoint saved")
         else:
             patience_counter += 1
-            if patience_counter >= EARLY_STOPPING_PATIENCE:
+            if phase == 2 and patience_counter >= EARLY_STOPPING_PATIENCE:
                 print(f"  Early stopping after {EARLY_STOPPING_PATIENCE} epochs without improvement")
                 break
 
@@ -177,20 +212,17 @@ def train_single(seed=42, suffix=""):
     return best_val_auc
 
 
-ENSEMBLE_SEEDS = [42, 123, 456, 789, 1024]
-
-
 def main():
-    """Train a single model or an ensemble of 5 models.
+    """Train a single model or an ensemble of 3 models.
 
     Usage:
         python -m model.train              # single model (seed=42)
-        python -m model.train --ensemble   # 5 models with different seeds
+        python -m model.train --ensemble   # 3 models with different seeds
     """
     import sys
 
     if "--ensemble" in sys.argv:
-        print("Training ensemble of 5 models...")
+        print("Training ensemble of 3 models...")
         aucs = []
         for i, seed in enumerate(ENSEMBLE_SEEDS):
             auc = train_single(seed=seed, suffix=f"_{i}")
@@ -201,7 +233,7 @@ def main():
         for i, auc in enumerate(aucs):
             print(f"  Model {i} (seed={ENSEMBLE_SEEDS[i]}): val_AUC={auc:.4f}")
         print(f"  Mean val_AUC: {sum(aucs)/len(aucs):.4f}")
-        print(f"  Saved: model_final_0.pt through model_final_4.pt")
+        print(f"  Saved: model_final_0.pt through model_final_2.pt")
     else:
         train_single(seed=42)
 

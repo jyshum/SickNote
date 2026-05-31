@@ -31,7 +31,7 @@ _CHECKPOINT_DIR = os.path.join(_PROJECT_ROOT, "model", "checkpoints")
 def _load_models():
     """Load ensemble models (or single model_final.pt as fallback).
 
-    Checks for model_final_0.pt through model_final_4.pt first (ensemble).
+    Checks for model_final_0.pt through model_final_2.pt first (ensemble).
     Falls back to model_final.pt if no ensemble files exist.
     Caches result in module-level globals so it only runs once.
     """
@@ -40,28 +40,23 @@ def _load_models():
     if _models is not None:
         return _models, _params
 
-    from model.architecture import SickNoteCNN
+    from model.architecture import SickNoteResNet
 
     params_path = os.path.join(_CHECKPOINT_DIR, "preprocessing_params.pt")
     params = torch.load(params_path, weights_only=True, map_location="cpu")
 
-    n_mels = params["n_mels"]
-    time_frames = params["time_frames"]
-
-    # Try loading ensemble members
     models = []
-    for i in range(5):
+    for i in range(3):
         path = os.path.join(_CHECKPOINT_DIR, f"model_final_{i}.pt")
         if os.path.exists(path):
-            model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+            model = SickNoteResNet()
             model.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
             model.eval()
             models.append(model)
 
-    # Fallback to single model
     if not models:
         single_path = os.path.join(_CHECKPOINT_DIR, "model_final.pt")
-        model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
+        model = SickNoteResNet()
         model.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
         model.eval()
         models.append(model)
@@ -133,8 +128,8 @@ def _compute_gradcam(model, input_tensor):
     def bwd_hook(module, grad_in, grad_out):
         gradients.append(grad_out[0].detach())
 
-    handle_fwd = model.conv.register_forward_hook(fwd_hook)
-    handle_bwd = model.conv.register_full_backward_hook(bwd_hook)
+    handle_fwd = model.layer4.register_forward_hook(fwd_hook)
+    handle_bwd = model.layer4.register_full_backward_hook(bwd_hook)
 
     input_copy = input_tensor.clone().requires_grad_(True)
     logits = model(input_copy)
