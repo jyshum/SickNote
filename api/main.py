@@ -23,11 +23,16 @@ CORS_ORIGINS = os.environ.get(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 ALLOWED_EXTENSIONS = {".webm", ".wav", ".ogg", ".mp3"}
+
+
+@app.get("/")
+async def health():
+    return {"status": "ok"}
 
 
 @app.post("/api/predict")
