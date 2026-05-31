@@ -45,19 +45,6 @@ app.add_middleware(
 ALLOWED_EXTENSIONS = {".webm", ".wav", ".ogg", ".mp3"}
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Eagerly load models so any crash shows in deploy logs."""
-    print("[SickNote] Loading models at startup...", flush=True)
-    try:
-        from api.inference import _load_models
-        _load_models()
-        print("[SickNote] Models loaded successfully!", flush=True)
-    except Exception as e:
-        print(f"[SickNote] FATAL: Model loading failed: {e}", flush=True)
-        traceback.print_exc()
-
-
 @app.get("/")
 async def health():
     return {"status": "ok"}
