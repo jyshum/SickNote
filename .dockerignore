@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+*.pyc
+frontend/
+data/
+.superpowers/
+*.md
+model/checkpoints/model_best_*.pt

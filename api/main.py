@@ -15,9 +15,14 @@ from api.inference import predict
 
 app = FastAPI(title="SickNote API")
 
+CORS_ORIGINS = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:3001",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["POST"],
     allow_headers=["*"],
 )
