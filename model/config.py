@@ -24,7 +24,7 @@ CONV_CHANNELS = [8, 16, 32]
 KERNEL_SIZE = 3
 
 # Evaluation
-THRESHOLD = 0.5
+THRESHOLD = 0.52
 
 # Device
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")

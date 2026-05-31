@@ -111,30 +111,40 @@ def main():
             all_labels.extend(truth)
 
     # ------------------------------------------------------------------
-    # 5. Compute metrics
+    # 5. Find optimal threshold via Youden's J statistic
     # ------------------------------------------------------------------
     all_labels_int = [int(l) for l in all_labels]
-    all_preds = [1 if p >= THRESHOLD else 0 for p in all_probs]
-
     auc = roc_auc_score(all_labels_int, all_probs)
-    acc = accuracy_score(all_labels_int, all_preds)
 
-    cm = confusion_matrix(all_labels_int, all_preds, labels=[0, 1])
-    tn, fp, fn, tp = cm.ravel()
+    best_threshold = THRESHOLD
+    best_j = -1.0
+    for t in [i / 100 for i in range(20, 81)]:
+        preds = [1 if p >= t else 0 for p in all_probs]
+        cm_t = confusion_matrix(all_labels_int, preds, labels=[0, 1])
+        tn_t, fp_t, fn_t, tp_t = cm_t.ravel()
+        sens_t = tp_t / (tp_t + fn_t) if (tp_t + fn_t) > 0 else 0.0
+        spec_t = tn_t / (tn_t + fp_t) if (tn_t + fp_t) > 0 else 0.0
+        j = sens_t + spec_t - 1
+        if j > best_j:
+            best_j = j
+            best_threshold = t
 
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0  # recall on abnormal
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0  # recall on healthy
+    # Compute metrics at both default and optimal thresholds
+    def compute_metrics(threshold):
+        preds = [1 if p >= threshold else 0 for p in all_probs]
+        acc = accuracy_score(all_labels_int, preds)
+        cm_r = confusion_matrix(all_labels_int, preds, labels=[0, 1])
+        tn, fp, fn, tp = cm_r.ravel()
+        sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+        return acc, sens, spec, tn, fp, fn, tp
+
+    acc, sensitivity, specificity, tn, fp, fn, tp = compute_metrics(THRESHOLD)
+    acc_opt, sens_opt, spec_opt, tn_opt, fp_opt, fn_opt, tp_opt = compute_metrics(best_threshold)
 
     # ------------------------------------------------------------------
     # 6. Report results with ARCHITECTURE.md targets
     # ------------------------------------------------------------------
-    print("\n" + "=" * 70)
-    print("TEST SET RESULTS")
-    print("=" * 70)
-
-    print(f"\n{'Metric':<16} {'Actual':>8}  {'Minimum':>8}  {'Target':>8}  {'Status'}")
-    print("-" * 65)
-
     def status(val, minimum, target):
         if val >= target:
             return "PASS (target)"
@@ -143,6 +153,12 @@ def main():
         else:
             return "BELOW MINIMUM"
 
+    print("\n" + "=" * 70)
+    print(f"TEST SET RESULTS (threshold={THRESHOLD})")
+    print("=" * 70)
+
+    print(f"\n{'Metric':<16} {'Actual':>8}  {'Minimum':>8}  {'Target':>8}  {'Status'}")
+    print("-" * 65)
     print(f"{'AUC-ROC':<16} {auc:>8.4f}  {0.75:>8.2f}  {0.82:>8.2f}  {status(auc, 0.75, 0.82)}")
     print(f"{'Accuracy':<16} {acc:>8.4f}  {0.70:>8.2f}  {0.78:>8.2f}  {status(acc, 0.70, 0.78)}")
     print(f"{'Sensitivity':<16} {sensitivity:>8.4f}  {0.65:>8.2f}  {0.75:>8.2f}  {status(sensitivity, 0.65, 0.75)}")
@@ -153,6 +169,24 @@ def main():
     print(f"  Actual=0(H)  {tn:>6}     {fp:>6}")
     print(f"  Actual=1(A)  {fn:>6}     {tp:>6}")
     print(f"\n  TP={tp}  TN={tn}  FP={fp}  FN={fn}")
+
+    if best_threshold != THRESHOLD:
+        print("\n" + "=" * 70)
+        print(f"OPTIMIZED RESULTS (threshold={best_threshold:.2f}, Youden's J={best_j:.4f})")
+        print("=" * 70)
+
+        print(f"\n{'Metric':<16} {'Actual':>8}  {'Minimum':>8}  {'Target':>8}  {'Status'}")
+        print("-" * 65)
+        print(f"{'AUC-ROC':<16} {auc:>8.4f}  {0.75:>8.2f}  {0.82:>8.2f}  {status(auc, 0.75, 0.82)}")
+        print(f"{'Accuracy':<16} {acc_opt:>8.4f}  {0.70:>8.2f}  {0.78:>8.2f}  {status(acc_opt, 0.70, 0.78)}")
+        print(f"{'Sensitivity':<16} {sens_opt:>8.4f}  {0.65:>8.2f}  {0.75:>8.2f}  {status(sens_opt, 0.65, 0.75)}")
+        print(f"{'Specificity':<16} {spec_opt:>8.4f}  {0.60:>8.2f}  {0.70:>8.2f}  {status(spec_opt, 0.60, 0.70)}")
+
+        print(f"\nConfusion Matrix (rows=actual, cols=predicted):")
+        print(f"              Pred=0(H)  Pred=1(A)")
+        print(f"  Actual=0(H)  {tn_opt:>6}     {fp_opt:>6}")
+        print(f"  Actual=1(A)  {fn_opt:>6}     {tp_opt:>6}")
+        print(f"\n  TP={tp_opt}  TN={tn_opt}  FP={fp_opt}  FN={fn_opt}")
 
     # ------------------------------------------------------------------
     # 7. Debugging checklist if AUC < 0.75

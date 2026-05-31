@@ -279,9 +279,9 @@ def predict(audio_path: str) -> dict:
             probs.append(torch.sigmoid(logits).item())
         prob = sum(probs) / len(probs)
 
-    # Determine label and confidence
-    # prob = P(abnormal) since label 1 = abnormal
-    if prob >= 0.5:
+    from model.config import THRESHOLD
+
+    if prob >= THRESHOLD:
         label = "abnormal"
         confidence = prob
     else:
