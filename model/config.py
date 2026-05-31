@@ -27,7 +27,9 @@ KERNEL_SIZE = 3
 THRESHOLD = 0.52
 
 # Device
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = torch.device(
+    "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"
+)
 
 # Paths
 RAW_DIR = "data/raw/coughvid_20211012"
