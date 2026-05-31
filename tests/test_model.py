@@ -389,81 +389,65 @@ class TestCoughDataset:
         assert torch.allclose(tensor, torch.ones(1, 64, 173) * 5.0)
 
 
-# ── SickNoteResNet tests ─────────────────────────────────────────────
+# ── SickNoteCNN tests ───────────────────────────────────────────────
 
 
-class TestSickNoteResNet:
-    """Test SickNoteResNet: output shape, various input sizes, Grad-CAM target."""
+class TestSickNoteCNN:
+    """Test SickNoteCNN: output shape, flatten dim, various input sizes."""
 
     def test_output_shape_batch_4(self):
         import torch
-        from model.architecture import SickNoteResNet
+        from model.architecture import SickNoteCNN
 
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=64, time_frames=173)
         x = torch.randn(4, 1, 64, 173)
         out = model(x)
         assert out.shape == (4, 1)
 
     def test_output_shape_batch_1(self):
         import torch
-        from model.architecture import SickNoteResNet
+        from model.architecture import SickNoteCNN
 
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=64, time_frames=173)
         x = torch.randn(1, 1, 64, 173)
         out = model(x)
         assert out.shape == (1, 1)
 
     def test_output_shape_batch_16(self):
         import torch
-        from model.architecture import SickNoteResNet
+        from model.architecture import SickNoteCNN
 
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=64, time_frames=173)
         x = torch.randn(16, 1, 64, 173)
         out = model(x)
         assert out.shape == (16, 1)
 
     def test_different_input_dimensions(self):
         import torch
-        from model.architecture import SickNoteResNet
+        from model.architecture import SickNoteCNN
 
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=128, time_frames=87)
         x = torch.randn(2, 1, 128, 87)
         out = model(x)
         assert out.shape == (2, 1)
 
+    def test_flatten_dim_is_positive(self):
+        from model.architecture import SickNoteCNN
+
+        model = SickNoteCNN(n_mels=64, time_frames=173)
+        assert model._flatten_dim > 0
+
     def test_outputs_raw_logits(self):
         """Model should output raw logits, not probabilities (no sigmoid)."""
         import torch
-        from model.architecture import SickNoteResNet
+        from model.architecture import SickNoteCNN
 
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=64, time_frames=173)
         model.eval()
         x = torch.randn(4, 1, 64, 173)
         with torch.no_grad():
             out = model(x)
+        # Raw logits can be negative or > 1 — if sigmoid were applied, all would be in [0,1]
+        # With random weights, it's extremely unlikely all 4 outputs fall in [0,1]
+        # We just check the output is a float tensor of the right shape
         assert out.dtype == torch.float32
-
-    def test_has_layer4_for_gradcam(self):
-        """model.layer4 must exist for Grad-CAM hooks."""
-        from model.architecture import SickNoteResNet
-
-        model = SickNoteResNet()
-        assert hasattr(model, "layer4")
-
-    def test_backbone_and_head_params(self):
-        """backbone_params() and head_params() must return non-empty iterators."""
-        from model.architecture import SickNoteResNet
-
-        model = SickNoteResNet()
-        backbone = list(model.backbone_params())
-        head = list(model.head_params())
-        assert len(backbone) > 0
-        assert len(head) > 0
-        assert len(head) < len(backbone)
-
-    def test_conv1_is_single_channel(self):
-        """conv1 must accept 1-channel input, not 3-channel."""
-        from model.architecture import SickNoteResNet
-
-        model = SickNoteResNet()
-        assert model.conv1.in_channels == 1

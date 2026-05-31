@@ -15,7 +15,7 @@ from sklearn.metrics import roc_auc_score, confusion_matrix, accuracy_score
 
 from model.config import BATCH_SIZE, CHECKPOINT_DIR, THRESHOLD, DEVICE
 from model.dataset import CoughDataset
-from model.architecture import SickNoteResNet
+from model.architecture import SickNoteCNN
 
 
 def _load_models():
@@ -24,12 +24,14 @@ def _load_models():
         os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"),
         weights_only=True,
     )
+    n_mels = params["n_mels"]
+    time_frames = params["time_frames"]
 
     models = []
-    for i in range(3):
+    for i in range(5):
         path = os.path.join(CHECKPOINT_DIR, f"model_final_{i}.pt")
         if os.path.exists(path):
-            model = SickNoteResNet()
+            model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
             model.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
             model.to(DEVICE)
             model.eval()
@@ -37,7 +39,7 @@ def _load_models():
 
     if not models:
         single_path = os.path.join(CHECKPOINT_DIR, "model_final.pt")
-        model = SickNoteResNet()
+        model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
         model.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
         model.to(DEVICE)
         model.eval()

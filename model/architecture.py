@@ -1,65 +1,61 @@
 """
-SickNoteResNet — ResNet18 backbone for binary cough classification.
+SickNoteCNN — small CNN for binary cough classification.
 
 Model outputs raw logits (no Sigmoid). Use BCEWithLogitsLoss for training.
 Apply torch.sigmoid() at inference time only.
 
-Pretrained on ImageNet. Input adapted from 3-channel to 1-channel.
+See ARCHITECTURE.md → Model Architecture for the full reference implementation.
 """
 import torch
 import torch.nn as nn
-import torchvision.models as models
+
+from model import config
 
 
-class SickNoteResNet(nn.Module):
-    """ResNet18 with 1-channel input and binary output.
+class SickNoteCNN(nn.Module):
+    """
+    Three conv-batchnorm-relu-maxpool blocks → flatten → two FC layers.
 
-    conv1 weights initialized by averaging pretrained 3-channel weights.
-    fc replaced with Linear(512, 1) for binary classification.
+    Args:
+        n_mels: number of mel frequency bins (from config.py, verified by explore.py)
+        time_frames: number of time frames in spectrogram (derived from config.py)
     """
 
-    def __init__(self):
+    def __init__(self, n_mels, time_frames):
         super().__init__()
-        resnet = models.resnet18(weights="IMAGENET1K_V1")
+        channels = config.CONV_CHANNELS  # [16, 32, 64]
+        k = config.KERNEL_SIZE           # 3
 
-        # Adapt conv1: 3-channel → 1-channel
-        old_conv1 = resnet.conv1
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        with torch.no_grad():
-            self.conv1.weight.copy_(old_conv1.weight.mean(dim=1, keepdim=True))
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, channels[0], k, padding=1), nn.BatchNorm2d(channels[0]),
+            nn.ReLU(), nn.MaxPool2d(2),
 
-        self.bn1 = resnet.bn1
-        self.relu = resnet.relu
-        self.maxpool = resnet.maxpool
-        self.layer1 = resnet.layer1
-        self.layer2 = resnet.layer2
-        self.layer3 = resnet.layer3
-        self.layer4 = resnet.layer4
-        self.avgpool = resnet.avgpool
+            nn.Conv2d(channels[0], channels[1], k, padding=1), nn.BatchNorm2d(channels[1]),
+            nn.ReLU(), nn.MaxPool2d(2),
 
-        # Replace classifier: 1000-class → binary
-        self.fc = nn.Linear(512, 1)
+            nn.Conv2d(channels[1], channels[2], k, padding=1), nn.BatchNorm2d(channels[2]),
+            nn.ReLU(), nn.MaxPool2d(2),
+        )
+        self._flatten_dim = self._get_flatten_dim(n_mels, time_frames)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self._flatten_dim, 128),
+            nn.ReLU(),
+            nn.Dropout(config.DROPOUT),
+            nn.Linear(128, 1),
+            # NO Sigmoid — use BCEWithLogitsLoss for numerical stability
+            # Apply torch.sigmoid() at inference time only
+        )
+
+    def _get_flatten_dim(self, n_mels, time_frames):
+        """Pass dummy tensor through conv layers to compute flatten dimension.
+        Never hardcode this value."""
+        dummy = torch.zeros(1, 1, n_mels, time_frames)
+        out = self.conv(dummy)
+        return int(torch.prod(torch.tensor(out.shape[1:])))
 
     def forward(self, x):
         """Returns raw logits, shape (batch_size, 1)."""
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        return self.fc(x)
-
-    def backbone_params(self):
-        """All parameters except the classifier head."""
-        for name, param in self.named_parameters():
-            if not name.startswith("fc."):
-                yield param
-
-    def head_params(self):
-        """Classifier head parameters only."""
-        return self.fc.parameters()
+        x = self.conv(x)
+        x = x.view(x.size(0), -1)
+        return self.classifier(x)

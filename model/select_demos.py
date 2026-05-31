@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from model.config import BATCH_SIZE, CHECKPOINT_DIR, DEVICE
 from model.dataset import CoughDataset
-from model.architecture import SickNoteResNet
+from model.architecture import SickNoteCNN
 from model.explore import find_audio_file
 
 
@@ -43,12 +43,14 @@ def main():
 
     mean = params["mean"]
     std = params["std"]
+    n_mels = params["n_mels"]
+    time_frames = params["time_frames"]
 
     models = []
-    for i in range(3):
+    for i in range(5):
         path = os.path.join(CHECKPOINT_DIR, f"model_final_{i}.pt")
         if os.path.exists(path):
-            m = SickNoteResNet()
+            m = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
             m.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
             m.to(DEVICE)
             m.eval()
@@ -56,7 +58,7 @@ def main():
 
     if not models:
         single_path = os.path.join(CHECKPOINT_DIR, "model_final.pt")
-        m = SickNoteResNet()
+        m = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
         m.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
         m.to(DEVICE)
         m.eval()

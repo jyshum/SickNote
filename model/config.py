@@ -13,18 +13,13 @@ HOP_LENGTH = 512
 
 # Training
 BATCH_SIZE = 32
-EPOCHS = 40
+EPOCHS = 80
 LR = 3e-4
 WEIGHT_DECAY = 1e-4
 DROPOUT = 0.5
-EARLY_STOPPING_PATIENCE = 10
+EARLY_STOPPING_PATIENCE = 15
 
-# Transfer learning
-LR_BACKBONE = 1e-5
-LR_HEAD = 1e-3
-FREEZE_EPOCHS = 5
-
-# Model (legacy — not used by SickNoteResNet)
+# Model
 CONV_CHANNELS = [8, 16, 32]
 KERNEL_SIZE = 3
 
