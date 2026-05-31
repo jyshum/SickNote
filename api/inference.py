@@ -79,7 +79,7 @@ def _audio_to_spectrogram(audio_path, params):
 
     Returns: torch.Tensor of shape (1, 1, n_mels, time_frames) -- batched for model input.
     """
-    from model.explore import _load_audio_ffmpeg
+    from api.audio_utils import load_audio_ffmpeg
 
     sample_rate = params["sample_rate"]
     clip_length = params["clip_length"]
@@ -90,7 +90,7 @@ def _audio_to_spectrogram(audio_path, params):
     std = params["std"]
 
     # Load audio via ffmpeg (handles .webm, .ogg, .wav, .mp3)
-    waveform, sr = _load_audio_ffmpeg(audio_path, target_sr=sample_rate)
+    waveform, sr = load_audio_ffmpeg(audio_path, target_sr=sample_rate)
 
     # Pad or trim to exactly clip_length seconds
     clip_samples = int(sample_rate * clip_length)
@@ -248,8 +248,8 @@ def predict(audio_path: str) -> dict:
     spec_tensor = _audio_to_spectrogram(audio_path, params)
 
     # Also get the unnormalized version for visualization
-    from model.explore import _load_audio_ffmpeg
-    waveform, sr = _load_audio_ffmpeg(audio_path, target_sr=params["sample_rate"])
+    from api.audio_utils import load_audio_ffmpeg
+    waveform, sr = load_audio_ffmpeg(audio_path, target_sr=params["sample_rate"])
     clip_samples = int(params["sample_rate"] * params["clip_length"])
     if waveform.shape[1] < clip_samples:
         pad_size = clip_samples - waveform.shape[1]
