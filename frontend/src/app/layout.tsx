@@ -1,18 +1,12 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Outfit, JetBrains_Mono } from "next/font/google";
+import { Outfit, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-
-const playfair = Playfair_Display({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
 
 const outfit = Outfit({
   variable: "--font-body",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -22,8 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SickNote — Cough Screening Tool",
-  description: "AI-powered cough screening. Not a medical diagnosis.",
+  title: "SickNote - Cough Signal Screening",
+  description:
+    "A cough screening interface that turns short audio samples into confidence-scored model signals.",
 };
 
 export default function RootLayout({
@@ -34,11 +29,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${playfair.variable} ${outfit.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${outfit.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-white text-slate-900 font-[family-name:var(--font-body)]">
+      <body className="min-h-full bg-[var(--background)] text-[var(--foreground)] font-[family-name:var(--font-body)]">
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <div className="min-h-full">{children}</div>
       </body>
     </html>
   );

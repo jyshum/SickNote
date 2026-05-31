@@ -64,9 +64,9 @@ export default function RecordButton({ onRecorded, disabled }: RecordButtonProps
 
   if (state === "unsupported") {
     return (
-      <div className="flex items-center justify-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-6 py-4 text-sm text-slate-500">
-        <Mic className="h-4 w-4 text-slate-400" />
-        Microphone unavailable — upload an audio file instead.
+      <div className="flex items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-6 py-4 text-sm text-slate-500">
+        <Mic className="h-4 w-4 text-[var(--brand-red)]" />
+        Microphone unavailable. Upload an audio file instead.
       </div>
     );
   }
@@ -96,9 +96,9 @@ export default function RecordButton({ onRecorded, disabled }: RecordButtonProps
     <button
       onClick={startRecording}
       disabled={disabled}
-      className="group flex w-full items-center justify-center gap-3 rounded-full bg-[var(--brand-red)] px-8 py-4 text-base font-semibold text-white shadow-[0_16px_48px_-12px_rgba(214,40,40,0.4)] transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--brand-red-hover)] active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
+      className="group flex w-full items-center justify-center gap-3 rounded-full bg-[var(--brand-red)] px-8 py-4 text-base font-semibold text-white transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--brand-red-hover)] active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
     >
-      <Mic className="h-5 w-5" />
+      <Mic className="h-5 w-5 transition duration-300 group-hover:scale-110" />
       Record cough
     </button>
   );

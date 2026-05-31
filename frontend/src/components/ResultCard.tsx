@@ -24,6 +24,13 @@ export default function ResultCard({
   const badgeText = isHealthy ? "LOW RISK" : "REVIEW RECOMMENDED";
   const Icon = isHealthy ? ShieldCheck : AlertTriangle;
 
+  const confidenceTier =
+    confidencePercent >= 70 ? "High" : confidencePercent >= 55 ? "Moderate" : "Low";
+  const filledBars =
+    confidenceTier === "High" ? 3 : confidenceTier === "Moderate" ? 2 : 1;
+  const tierColor =
+    confidenceTier === "Low" ? "#94a3b8" : accentColor;
+
   return (
     <div
       className={`relative overflow-hidden rounded-2xl border bg-white transition-shadow duration-500 ${
@@ -63,21 +70,26 @@ export default function ResultCard({
           </span>
         </div>
 
-        <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-5">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <p className="text-sm font-medium text-slate-600">Confidence</p>
-            <p className="font-[family-name:var(--font-mono)] text-2xl font-semibold tabular-nums text-slate-950">
-              {confidencePercent}%
-            </p>
-          </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full transition-[width] duration-700 ease-out"
-              style={{
-                width: `${confidencePercent}%`,
-                backgroundColor: accentColor,
-              }}
-            />
+        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-slate-600">Confidence</p>
+              <p className="mt-1 text-lg font-semibold text-slate-950">
+                {confidenceTier}
+              </p>
+            </div>
+            <div className="flex items-end gap-1.5">
+              {[1, 2, 3].map((bar) => (
+                <div
+                  key={bar}
+                  className="w-2.5 rounded-sm transition-colors duration-500"
+                  style={{
+                    height: bar * 8 + 6,
+                    backgroundColor: bar <= filledBars ? tierColor : "#e2e8f0",
+                  }}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
@@ -98,7 +110,7 @@ export default function ResultCard({
       </div>
 
       {(result.spectrogram || result.gradcam) && (
-        <div className="border-t border-slate-200 bg-slate-950 p-4 space-y-3">
+        <div className="space-y-3 border-t border-slate-200 bg-slate-950 p-4">
           {result.spectrogram && (
             <div>
               <p className="mb-2 text-xs font-medium text-slate-400">Spectrogram</p>

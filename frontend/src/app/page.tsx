@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { predictCough, type PredictionResult } from "@/lib/api";
 import AudioInput from "@/components/AudioInput";
 import ResultCard from "@/components/ResultCard";
 import type { PredictionSource } from "@/lib/predictionHistory";
-import { AlertCircle, ArrowDown, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Stethoscope,
+} from "lucide-react";
 
 interface RecordingEntry {
   id: string;
@@ -22,7 +31,42 @@ export default function Home() {
   const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
+  const pageRef = useRef<HTMLElement>(null);
+  const analyzerRef = useRef<HTMLElement>(null);
+
   const hasResults = recordings.length > 0 || loading || errorMsg;
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const context = gsap.context(() => {
+      gsap.from("[data-hero-reveal]", {
+        y: 28,
+        opacity: 0,
+        duration: 0.9,
+        ease: "power3.out",
+        stagger: 0.1,
+      });
+
+      gsap.from("[data-analyzer-reveal]", {
+        y: 34,
+        opacity: 0,
+        duration: 0.8,
+        ease: "power3.out",
+        stagger: 0.08,
+        scrollTrigger: {
+          trigger: analyzerRef.current,
+          start: "top 74%",
+        },
+      });
+    }, pageRef);
+
+    return () => context.revert();
+  }, []);
 
   async function handleAudioReady(file: File, source: PredictionSource) {
     setLoading(true);
@@ -61,182 +105,195 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-[100dvh] w-full max-w-full overflow-x-hidden">
-      {/* ── Hero ── */}
-      <section className="relative flex min-h-[70vh] flex-col items-center justify-center px-6 py-20 md:py-28">
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(214,40,40,0.08),transparent)]" />
+    <main
+      ref={pageRef}
+      className="relative min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[var(--background)] text-slate-950"
+    >
+      <div className="noise-overlay" />
 
-        <h1 className="max-w-5xl text-center text-[clamp(2.6rem,6vw,5.5rem)] font-semibold leading-[1.05] tracking-tight text-slate-950">
-          Know when your cough
-          <br />
-          needs a <span className="text-[var(--brand-red)]">closer look</span>
-        </h1>
+      <section className="relative isolate flex min-h-[92dvh] items-center px-5 pb-20 pt-32 sm:px-8 md:pt-36 lg:px-10">
+        <div className="clinic-grid pointer-events-none absolute inset-0 -z-20" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_18%,rgba(214,40,40,0.10),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.7),rgba(251,250,247,0.96)_72%)]" />
 
-        <p className="mt-8 max-w-lg text-center text-lg leading-relaxed text-slate-500 font-light">
-          Record a short sample. Our classifier returns a screening result
-          with confidence scoring and spectrogram analysis.
-        </p>
+        <div className="mx-auto flex max-w-6xl flex-col items-center text-center">
+          <p
+            data-hero-reveal
+            className="mb-6 max-w-xl font-[family-name:var(--font-mono)] text-xs uppercase leading-6 tracking-[0.28em] text-[var(--brand-red)]"
+          >
+            Cough screening support, clearly explained
+          </p>
 
-        <a
-          href="#analyze"
-          className="mt-12 inline-flex items-center gap-3 rounded-full bg-[var(--brand-red)] px-8 py-4 text-base font-semibold text-white shadow-[0_16px_48px_-12px_rgba(214,40,40,0.4)] transition duration-300 hover:bg-[var(--brand-red-hover)] hover:-translate-y-0.5 active:translate-y-0"
-        >
-          Record your cough
-          <ArrowDown className="h-4 w-4" />
-        </a>
+          <h1
+            data-hero-reveal
+            className="max-w-5xl text-[clamp(2.75rem,5.8vw,5.8rem)] font-black leading-[0.98] tracking-normal text-slate-950"
+          >
+            Know when your cough needs a closer look.
+          </h1>
 
-        <p className="mt-12 max-w-sm text-center text-xs leading-5 text-slate-400">
-          Screening support only. This does not replace medical
-          diagnosis or clinical care.
-        </p>
+          <p
+            data-hero-reveal
+            className="mt-7 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl"
+          >
+            Record a short sample or upload audio. SickNote returns a screening
+            result with confidence scoring and spectrogram context.
+          </p>
+
+          <div data-hero-reveal className="mt-10 flex flex-col gap-3 sm:flex-row">
+            <a
+              href="#analyze"
+              className="inline-flex items-center justify-center gap-3 rounded-full bg-[var(--brand-red)] px-7 py-4 text-base font-bold text-white transition duration-300 hover:-translate-y-0.5 hover:bg-[var(--brand-red-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-red)] focus:ring-offset-2 focus:ring-offset-[var(--background)] active:translate-y-0"
+            >
+              Start screening
+              <ArrowDown className="h-4 w-4" />
+            </a>
+            <a
+              href="/technical"
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-7 py-4 text-base font-bold text-slate-800 transition duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 focus:ring-offset-[var(--background)] active:translate-y-0"
+            >
+              How it works
+            </a>
+          </div>
+
+        </div>
       </section>
 
-      {/* ── Analyze Section ── */}
       <section
+        ref={analyzerRef}
         id="analyze"
-        className="border-t border-slate-200/60 bg-white px-6 py-16 md:py-24"
+        className="border-t border-slate-200/80 bg-white px-5 py-20 sm:px-8 md:py-28 lg:px-10"
       >
         <div className="mx-auto max-w-6xl">
+          <div data-analyzer-reveal className="mb-10 max-w-3xl">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-red-light)] text-[var(--brand-red)]">
+                <Stethoscope className="h-5 w-5" />
+              </span>
+              <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.24em] text-slate-400">
+                Analyzer
+              </p>
+            </div>
+            <h2 className="text-[clamp(2rem,4vw,3.4rem)] font-black leading-tight tracking-normal text-slate-950">
+              Submit a sample and review the result in one place.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+              This is screening support only. It does not replace medical diagnosis
+              or clinical care.
+            </p>
+          </div>
+
           <div
-            className={`grid transition-all duration-700 ease-out ${
-              hasResults
-                ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-10 lg:gap-14"
-                : "grid-cols-1"
+            className={`grid gap-6 transition-all duration-700 ease-out ${
+              hasResults ? "lg:grid-cols-[0.82fr_1.18fr]" : "lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]"
             }`}
           >
-            {/* ── Left: Input ── */}
-            <div
-              className={`transition-all duration-700 ease-out ${
-                hasResults ? "" : "mx-auto max-w-2xl w-full"
-              }`}
+            <article
+              data-analyzer-reveal
+              className="rounded-[1.75rem] border border-slate-200 bg-[#fbfaf7] p-5 shadow-[0_24px_80px_-54px_rgba(15,23,42,0.36)] sm:p-7"
             >
-              <div className="lg:sticky lg:top-28">
-                <h2 className="text-[clamp(1.6rem,3vw,2.4rem)] font-semibold leading-tight tracking-tight text-slate-950">
-                  Submit a sample
-                </h2>
-                <p className="mt-3 text-base text-slate-500">
-                  Use your microphone or upload an existing audio file.
-                </p>
+              <AudioInput onAudioReady={handleAudioReady} disabled={loading} />
+            </article>
 
-                <div className="mt-10">
-                  <AudioInput
-                    onAudioReady={handleAudioReady}
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ── Right: Paginated Results ── */}
-            {hasResults && (
-              <div>
-                {/* Header with navigation */}
-                <div className="mb-5 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-950">
+            <article
+              data-analyzer-reveal
+              className="min-h-[300px] rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_-54px_rgba(15,23,42,0.28)] sm:p-7"
+            >
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold tracking-normal text-slate-950">
                     Results
                   </h3>
-
-                  {total > 1 && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={goPrev}
-                        disabled={activeIndex === 0}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition duration-200 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-
-                      {/* Dot indicators */}
-                      <div className="flex items-center gap-1.5 px-2">
-                        {recordings.map((_, i) => (
-                          <button
-                            key={recordings[i].id}
-                            onClick={() => setActiveIndex(i)}
-                            className={`rounded-full transition-all duration-300 ${
-                              i === activeIndex
-                                ? i === 0
-                                  ? "h-2.5 w-2.5 bg-[var(--brand-red)]"
-                                  : "h-2.5 w-2.5 bg-slate-950"
-                                : i === 0
-                                  ? "h-1.5 w-1.5 bg-[var(--brand-red)]/40 hover:bg-[var(--brand-red)]/70"
-                                  : "h-1.5 w-1.5 bg-slate-300 hover:bg-slate-400"
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      <button
-                        onClick={goNext}
-                        disabled={activeIndex === total - 1}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition duration-200 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
+                  <p className="mt-1 text-sm text-slate-500">
+                    Your latest analysis appears here.
+                  </p>
                 </div>
 
-                {/* Page counter */}
-                {total > 0 && (
-                  <p className="mb-4 font-[family-name:var(--font-mono)] text-xs tabular-nums text-slate-400">
-                    {activeIndex + 1} / {total}
-                  </p>
-                )}
-
-                {/* Loading skeleton */}
-                {loading && (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                    <div className="flex items-center gap-4">
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      </span>
-                      <div>
-                        <p className="text-base font-semibold text-slate-950">
-                          Analyzing your cough
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Preparing audio, generating spectrogram, running classifier.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-6 space-y-3">
-                      <div className="h-3 w-full animate-pulse rounded-full bg-slate-100" />
-                      <div className="h-3 w-4/5 animate-pulse rounded-full bg-slate-100" />
-                      <div className="h-16 animate-pulse rounded-xl bg-slate-100" />
-                    </div>
+                {total > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={goPrev}
+                      disabled={activeIndex === 0}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition duration-200 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Previous result"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={goNext}
+                      disabled={activeIndex === total - 1}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition duration-200 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Next result"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
                   </div>
-                )}
-
-                {/* Error */}
-                {errorMsg && !loading && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                    <div className="flex gap-3">
-                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                      <div>
-                        <p className="font-semibold text-amber-900">
-                          Analysis did not complete
-                        </p>
-                        <p className="mt-1 text-sm leading-6 text-amber-800">
-                          {errorMsg}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Active result card */}
-                {!loading && activeEntry && (
-                  <ResultCard
-                    key={activeEntry.id}
-                    result={activeEntry.result}
-                    audioUrl={activeEntry.audioUrl}
-                    audioName={activeEntry.fileName}
-                    source={activeEntry.source}
-                    isLatest={activeIndex === 0}
-                  />
                 )}
               </div>
-            )}
+
+              {total > 0 && (
+                <p className="mb-4 font-[family-name:var(--font-mono)] text-xs tabular-nums text-slate-400">
+                  {activeIndex + 1} / {total}
+                </p>
+              )}
+
+              {!hasResults && (
+                <div className="flex min-h-[210px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
+                  <p className="max-w-sm text-sm leading-6 text-slate-500">
+                    Record or upload a cough sample to see confidence scoring,
+                    result status, and audio playback.
+                  </p>
+                </div>
+              )}
+
+              {loading && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[var(--brand-red)]">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </span>
+                    <div>
+                      <p className="text-base font-semibold text-slate-950">
+                        Analyzing your cough
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Preparing audio, generating spectrogram, running classifier.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-6 space-y-3">
+                    <div className="h-3 w-full animate-pulse rounded-full bg-slate-200" />
+                    <div className="h-3 w-4/5 animate-pulse rounded-full bg-slate-200" />
+                    <div className="h-20 animate-pulse rounded-2xl bg-slate-200" />
+                  </div>
+                </div>
+              )}
+
+              {errorMsg && !loading && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                  <div className="flex gap-3">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <div>
+                      <p className="font-semibold text-amber-950">
+                        Analysis did not complete
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-amber-800">
+                        {errorMsg}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!loading && activeEntry && (
+                <ResultCard
+                  key={activeEntry.id}
+                  result={activeEntry.result}
+                  audioUrl={activeEntry.audioUrl}
+                  audioName={activeEntry.fileName}
+                  source={activeEntry.source}
+                  isLatest={activeIndex === 0}
+                />
+              )}
+            </article>
           </div>
         </div>
       </section>
