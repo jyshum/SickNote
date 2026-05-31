@@ -7,11 +7,24 @@ Accepts audio file upload, returns prediction JSON.
 Usage: uvicorn api.main:app --reload --port 8000
 """
 import os
+import sys
 import tempfile
+import traceback
+
+print("[SickNote] Starting API server...", flush=True)
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.inference import predict
+print("[SickNote] FastAPI imported OK", flush=True)
+
+try:
+    from api.inference import predict
+    print("[SickNote] Inference module imported OK", flush=True)
+except Exception as e:
+    print(f"[SickNote] FATAL: Failed to import inference: {e}", flush=True)
+    traceback.print_exc()
+    sys.exit(1)
 
 app = FastAPI(title="SickNote API")
 
@@ -19,6 +32,8 @@ CORS_ORIGINS = os.environ.get(
     "CORS_ORIGINS",
     "http://localhost:3000,http://localhost:3001",
 ).split(",")
+
+print(f"[SickNote] CORS origins: {CORS_ORIGINS}", flush=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +43,19 @@ app.add_middleware(
 )
 
 ALLOWED_EXTENSIONS = {".webm", ".wav", ".ogg", ".mp3"}
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Eagerly load models so any crash shows in deploy logs."""
+    print("[SickNote] Loading models at startup...", flush=True)
+    try:
+        from api.inference import _load_models
+        _load_models()
+        print("[SickNote] Models loaded successfully!", flush=True)
+    except Exception as e:
+        print(f"[SickNote] FATAL: Model loading failed: {e}", flush=True)
+        traceback.print_exc()
 
 
 @app.get("/")
