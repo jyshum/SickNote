@@ -231,9 +231,9 @@ python -m model.evaluate     # Test set metrics + threshold
 
 ## Team
 
-Two-person project with clear ownership boundaries:
+Two-person project for a Hackathon:
 
-- **P1** — ML pipeline (`model/`, `data/`, real `api/inference.py`)
-- **P2** — Frontend + API routing (`frontend/`, `api/main.py`)
+- **Migael** — ML pipeline (`model/`, `data/`, real `api/inference.py`)
+- **Jared** — Frontend + API routing (`frontend/`, `api/main.py`)
 
-The handoff file `api/inference.py` is the only shared file, edited sequentially: P2 wrote the mock, P1 replaced the body. The function signature never changed. See `ARCHITECTURE.md` for the full partner contract.
+The handoff file `api/inference.py` is the only shared file, edited sequentially: Jared wrote the mock, Migael replaced the body. The function signature never changed. See `ARCHITECTURE.md` for the full partner contract.
