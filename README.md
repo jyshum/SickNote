@@ -140,7 +140,7 @@ Five models are trained independently with different random seeds. At inference,
 
 ```
 sicknote/
-├── frontend/                   # Next.js app (P2)
+├── frontend/                   # Next.js app
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx        # Main analyzer UI
@@ -154,7 +154,7 @@ sicknote/
 │   ├── inference.py            # Ensemble prediction + Grad-CAM
 │   └── audio_utils.py          # ffmpeg-based audio loading
 │
-├── model/                      # ML pipeline (P1)
+├── model/                      # ML pipeline
 │   ├── config.py               # Hyperparameters (verified by explore.py)
 │   ├── architecture.py         # SickNoteCNN definition
 │   ├── explore.py              # Dataset analysis (run first)
@@ -166,7 +166,7 @@ sicknote/
 │
 ├── data/                       # COUGHVID dataset + processed tensors
 ├── tests/                      # test_api.py, test_model.py
-├── ARCHITECTURE.md             # Full specification + partner contract
+├── ARCHITECTURE.md             # Full specification
 ├── Dockerfile                  # CPU-only PyTorch for Railway
 └── railway.toml                # Deployment config
 ```
@@ -229,11 +229,6 @@ python -m model.evaluate     # Test set metrics + threshold
 
 ---
 
-## Team
+## Awards
 
-Two-person project for a Hackathon:
-
-- **Migael** — ML pipeline (`model/`, `data/`, real `api/inference.py`)
-- **Jared** — Frontend + API routing (`frontend/`, `api/main.py`)
-
-The handoff file `api/inference.py` is the only shared file, edited sequentially: Jared wrote the mock, Migael replaced the body. The function signature never changed. See `ARCHITECTURE.md` for the full partner contract.
+**3rd Place** — [XdHacks Mini Vancouver](http://xdhacksvan.com/vancouver/) Hackathon (2026)
