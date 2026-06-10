@@ -391,8 +391,8 @@ export default function TechnicalPage() {
                 All COUGHVID recordings are voluntary intentional coughs
               </li>
               <li>
-                Trained on ~2,300 expert-labeled samples — small by production
-                ML standards
+                ~2,300 expert-labeled samples, split into ~1,600 for training —
+                small by production ML standards
               </li>
               <li>
                 Class imbalance: ~78% abnormal / ~22% healthy after expert

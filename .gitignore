@@ -22,3 +22,9 @@ frontend/.next/
 
 # OS
 .DS_Store
+
+# Plans / tooling artifacts
+TRANSFER_LEARNING_PLAN.md
+docs/
+.superpowers/
+stats_experiment/
