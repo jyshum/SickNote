@@ -6,6 +6,10 @@ SickNote is a screening tool that analyzes cough audio recordings to distinguish
 
 > **Screening support only. Does not replace medical diagnosis.**
 
+## Awards
+
+**3rd Place** — [XdHacks Mini Vancouver](http://xdhacksvan.com/vancouver/) Hackathon (2026)
+
 ---
 
 ## Tech Stack
@@ -226,9 +230,3 @@ python -m model.evaluate     # Test set metrics + threshold
 - Binary only — does not distinguish COVID vs. URTI vs. LRTI
 - Collected during the COVID pandemic — label distribution reflects that epidemiological context
 - Not a COVID detector, not a stethoscope replacement, not production medical software
-
----
-
-## Awards
-
-**3rd Place** — [XdHacks Mini Vancouver](http://xdhacksvan.com/vancouver/) Hackathon (2026)
