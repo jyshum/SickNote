@@ -1,0 +1,24 @@
+{
+  "n_clips": 2267,
+  "n_folds": 5,
+  "pooled_auc": 0.6848838410408304,
+  "ci_low": 0.6574535725633899,
+  "ci_high": 0.7121426109879267,
+  "fold_aucs": [
+    0.7002910948731658,
+    0.7079971094785017,
+    0.6521438034445382,
+    0.6634650126460315,
+    0.7448813681801758
+  ],
+  "fold_thresholds": [
+    0.51,
+    0.39,
+    0.35,
+    0.42,
+    0.46
+  ],
+  "min_sensitivity": 0.8,
+  "youden_reference_threshold": 0.48,
+  "early_stopping_metric": "val_auc_smooth"
+}

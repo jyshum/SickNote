@@ -26,6 +26,16 @@ KERNEL_SIZE = 3
 # Evaluation
 THRESHOLD = 0.52
 
+# Cross-validation (model/crossval.py)
+N_FOLDS = 5
+CV_VAL_FRACTION = 0.15      # inner val split, carved from the 4 training folds
+CV_SEED = 0
+CV_CHECKPOINT_DIR = "model/checkpoints/cv"
+
+# Threshold policy — SickNote is a screening tool, so a missed abnormal cough
+# costs more than a false alarm. Provisional until we read the measured curve.
+MIN_SENSITIVITY = 0.80
+
 # Device
 DEVICE = torch.device(
     "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu"

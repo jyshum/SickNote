@@ -1,28 +1,30 @@
 """
-Evaluate trained model on held-out test set.
+Evaluate the shipped ensemble on the original held-out test split.
 
-Reports: AUC-ROC, accuracy, sensitivity, specificity, confusion matrix.
-See ARCHITECTURE.md -> P1 Step 4 for target thresholds.
+The threshold is selected on the VALIDATION split and then applied, unchanged,
+to test. The previous version searched thresholds directly on the test set,
+which fitted a hyperparameter to the data it was reporting on.
+
+For the trustworthy number, prefer model/crossval.py — this script measures a
+single 341-clip split, which we have measured to be worth roughly +-0.05 AUC.
 
 Usage: PYTORCH_ENABLE_MPS_FALLBACK=1 python -m model.evaluate
 """
 
 import os
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, confusion_matrix, accuracy_score
 
-from model.config import BATCH_SIZE, CHECKPOINT_DIR, THRESHOLD, DEVICE
-from model.dataset import CoughDataset
+from model import metrics
 from model.architecture import SickNoteCNN
+from model.config import CHECKPOINT_DIR, THRESHOLD, DEVICE, MIN_SENSITIVITY
 
 
 def _load_models():
     """Load ensemble models (or single model_final.pt as fallback)."""
     params = torch.load(
-        os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"),
-        weights_only=True,
+        os.path.join(CHECKPOINT_DIR, "preprocessing_params.pt"), weights_only=True
     )
     n_mels = params["n_mels"]
     time_frames = params["time_frames"]
@@ -48,164 +50,67 @@ def _load_models():
     return models, params
 
 
+@torch.no_grad()
+def _ensemble_probs(models, files, mean, std, batch_size=128):
+    """Average the ensemble's sigmoid outputs over a list of .pt files."""
+    out = []
+    for start in range(0, len(files), batch_size):
+        batch = torch.stack([
+            torch.load(f, weights_only=True) for f in files[start:start + batch_size]
+        ])
+        x = ((batch - mean) / std).to(DEVICE)
+        per_model = [torch.sigmoid(m(x)).squeeze(1).cpu() for m in models]
+        out.append(torch.stack(per_model).mean(dim=0))
+    return torch.cat(out).numpy()
+
+
+def _report(name, y, probs, threshold):
+    row = [r for r in metrics.sweep(y, probs, [threshold])][0]
+    print(f"\n{name} (threshold={threshold:.2f})")
+    print(f"  {'AUC-ROC':<14}{metrics.roc_auc(y, probs):.4f}")
+    print(f"  {'Accuracy':<14}{row['accuracy']:.4f}")
+    print(f"  {'Sensitivity':<14}{row['sensitivity']:.4f}   (caught {row['tp']} of {row['tp'] + row['fn']} abnormal)")
+    print(f"  {'Specificity':<14}{row['specificity']:.4f}   (cleared {row['tn']} of {row['tn'] + row['fp']} healthy)")
+    print(f"  confusion: TP={row['tp']} TN={row['tn']} FP={row['fp']} FN={row['fn']}")
+
+
 def main():
-    """Load ensemble (or single model), run on test split, print metrics."""
-    print("=" * 70)
-    print("SickNote -- Test Set Evaluation (evaluate.py)")
-    print("=" * 70)
+    print("=" * 72)
+    print("SickNote — single-split evaluation (threshold chosen on val)")
+    print("=" * 72)
 
-    # ------------------------------------------------------------------
-    # 1. Load models and preprocessing params
-    # ------------------------------------------------------------------
     models, params = _load_models()
+    splits = torch.load(os.path.join(CHECKPOINT_DIR, "splits.pt"), weights_only=False)
+    mean, std = params["mean"], params["std"]
 
-    splits = torch.load(
-        os.path.join(CHECKPOINT_DIR, "splits.pt"),
-        weights_only=False,
-    )
+    y_val = np.asarray(splits["val_labels"], dtype=int)
+    y_test = np.asarray(splits["test_labels"], dtype=int)
 
-    mean = params["mean"]
-    std = params["std"]
+    print(f"\nDevice: {DEVICE}   Ensemble size: {len(models)}")
+    print(f"Val: {len(y_val)} clips   Test: {len(y_test)} clips")
 
-    test_files = splits["test_files"]
-    test_labels = splits["test_labels"]
+    val_probs = _ensemble_probs(models, splits["val_files"], mean, std)
+    test_probs = _ensemble_probs(models, splits["test_files"], mean, std)
 
-    print(f"\nDevice: {DEVICE}")
-    print(f"Ensemble size: {len(models)}")
-    print(f"Test samples: {len(test_files)}")
-    print(f"  Healthy (0): {test_labels.count(0)}")
-    print(f"  Abnormal (1): {test_labels.count(1)}")
-    print(f"Threshold: {THRESHOLD}")
-    print(f"Normalization: mean={mean:.4f}, std={std:.4f}")
+    # ---- threshold selected on VAL only ----
+    thr, row, met = metrics.threshold_for_min_sensitivity(y_val, val_probs, MIN_SENSITIVITY)
+    print(f"\nThreshold chosen on val for min sensitivity {MIN_SENSITIVITY}: {thr:.2f}")
+    print(f"  on val -> sensitivity {row['sensitivity']:.4f}, specificity {row['specificity']:.4f}")
+    if not met:
+        print(f"  WARNING: sensitivity floor not reachable on this split")
 
-    # ------------------------------------------------------------------
-    # 3. Create dataset and dataloader
-    # ------------------------------------------------------------------
-    test_ds = CoughDataset(test_files, test_labels, mean=mean, std=std)
-    test_loader = DataLoader(
-        test_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0
-    )
+    yj_val, _ = metrics.youden_threshold(y_val, val_probs)
+    print(f"  (Youden's J on val would pick {yj_val:.2f}; config currently ships {THRESHOLD:.2f})")
 
-    # ------------------------------------------------------------------
-    # 4. Run ensemble inference — average probabilities across models
-    # ------------------------------------------------------------------
-    all_probs = []
-    all_labels = []
+    # ---- applied unchanged to TEST ----
+    _report("TEST — sensitivity-first threshold", y_test, test_probs, thr)
+    _report("TEST — currently shipped threshold", y_test, test_probs, THRESHOLD)
 
-    with torch.no_grad():
-        for spectrograms, labels in test_loader:
-            spectrograms = spectrograms.to(DEVICE)
-            batch_probs = []
-            for model in models:
-                logits = model(spectrograms)
-                batch_probs.append(torch.sigmoid(logits).squeeze(1).cpu())
-            avg_probs = torch.stack(batch_probs).mean(dim=0).tolist()
-            truth = labels.tolist()
-
-            if isinstance(avg_probs, float):
-                avg_probs = [avg_probs]
-            if isinstance(truth, float):
-                truth = [truth]
-
-            all_probs.extend(avg_probs)
-            all_labels.extend(truth)
-
-    # ------------------------------------------------------------------
-    # 5. Find optimal threshold via Youden's J statistic
-    # ------------------------------------------------------------------
-    all_labels_int = [int(l) for l in all_labels]
-    auc = roc_auc_score(all_labels_int, all_probs)
-
-    best_threshold = THRESHOLD
-    best_j = -1.0
-    for t in [i / 100 for i in range(20, 81)]:
-        preds = [1 if p >= t else 0 for p in all_probs]
-        cm_t = confusion_matrix(all_labels_int, preds, labels=[0, 1])
-        tn_t, fp_t, fn_t, tp_t = cm_t.ravel()
-        sens_t = tp_t / (tp_t + fn_t) if (tp_t + fn_t) > 0 else 0.0
-        spec_t = tn_t / (tn_t + fp_t) if (tn_t + fp_t) > 0 else 0.0
-        j = sens_t + spec_t - 1
-        if j > best_j:
-            best_j = j
-            best_threshold = t
-
-    # Compute metrics at both default and optimal thresholds
-    def compute_metrics(threshold):
-        preds = [1 if p >= threshold else 0 for p in all_probs]
-        acc = accuracy_score(all_labels_int, preds)
-        cm_r = confusion_matrix(all_labels_int, preds, labels=[0, 1])
-        tn, fp, fn, tp = cm_r.ravel()
-        sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-        return acc, sens, spec, tn, fp, fn, tp
-
-    acc, sensitivity, specificity, tn, fp, fn, tp = compute_metrics(THRESHOLD)
-    acc_opt, sens_opt, spec_opt, tn_opt, fp_opt, fn_opt, tp_opt = compute_metrics(best_threshold)
-
-    # ------------------------------------------------------------------
-    # 6. Report results with ARCHITECTURE.md targets
-    # ------------------------------------------------------------------
-    def status(val, minimum, target):
-        if val >= target:
-            return "PASS (target)"
-        elif val >= minimum:
-            return "PASS (minimum)"
-        else:
-            return "BELOW MINIMUM"
-
-    print("\n" + "=" * 70)
-    print(f"TEST SET RESULTS (threshold={THRESHOLD})")
-    print("=" * 70)
-
-    print(f"\n{'Metric':<16} {'Actual':>8}  {'Minimum':>8}  {'Target':>8}  {'Status'}")
-    print("-" * 65)
-    print(f"{'AUC-ROC':<16} {auc:>8.4f}  {0.75:>8.2f}  {0.82:>8.2f}  {status(auc, 0.75, 0.82)}")
-    print(f"{'Accuracy':<16} {acc:>8.4f}  {0.70:>8.2f}  {0.78:>8.2f}  {status(acc, 0.70, 0.78)}")
-    print(f"{'Sensitivity':<16} {sensitivity:>8.4f}  {0.65:>8.2f}  {0.75:>8.2f}  {status(sensitivity, 0.65, 0.75)}")
-    print(f"{'Specificity':<16} {specificity:>8.4f}  {0.60:>8.2f}  {0.70:>8.2f}  {status(specificity, 0.60, 0.70)}")
-
-    print(f"\nConfusion Matrix (rows=actual, cols=predicted):")
-    print(f"              Pred=0(H)  Pred=1(A)")
-    print(f"  Actual=0(H)  {tn:>6}     {fp:>6}")
-    print(f"  Actual=1(A)  {fn:>6}     {tp:>6}")
-    print(f"\n  TP={tp}  TN={tn}  FP={fp}  FN={fn}")
-
-    if best_threshold != THRESHOLD:
-        print("\n" + "=" * 70)
-        print(f"OPTIMIZED RESULTS (threshold={best_threshold:.2f}, Youden's J={best_j:.4f})")
-        print("=" * 70)
-
-        print(f"\n{'Metric':<16} {'Actual':>8}  {'Minimum':>8}  {'Target':>8}  {'Status'}")
-        print("-" * 65)
-        print(f"{'AUC-ROC':<16} {auc:>8.4f}  {0.75:>8.2f}  {0.82:>8.2f}  {status(auc, 0.75, 0.82)}")
-        print(f"{'Accuracy':<16} {acc_opt:>8.4f}  {0.70:>8.2f}  {0.78:>8.2f}  {status(acc_opt, 0.70, 0.78)}")
-        print(f"{'Sensitivity':<16} {sens_opt:>8.4f}  {0.65:>8.2f}  {0.75:>8.2f}  {status(sens_opt, 0.65, 0.75)}")
-        print(f"{'Specificity':<16} {spec_opt:>8.4f}  {0.60:>8.2f}  {0.70:>8.2f}  {status(spec_opt, 0.60, 0.70)}")
-
-        print(f"\nConfusion Matrix (rows=actual, cols=predicted):")
-        print(f"              Pred=0(H)  Pred=1(A)")
-        print(f"  Actual=0(H)  {tn_opt:>6}     {fp_opt:>6}")
-        print(f"  Actual=1(A)  {fn_opt:>6}     {tp_opt:>6}")
-        print(f"\n  TP={tp_opt}  TN={tn_opt}  FP={fp_opt}  FN={fn_opt}")
-
-    # ------------------------------------------------------------------
-    # 7. Debugging checklist if AUC < 0.75
-    # ------------------------------------------------------------------
-    if auc < 0.75:
-        print("\n" + "!" * 70)
-        print("WARNING: AUC < 0.75 -- Debugging Checklist")
-        print("!" * 70)
-        print("1. Are class weights computed from filtered expert-labeled data, not full dataset?")
-        print("2. Is normalization fitted on train split only?")
-        print("3. Is the model seeing enough healthy examples?")
-        print("   (print batch labels -- healthy is minority ~22%)")
-        print("4. Try LR = 1e-4, more epochs, lighter model")
-        print("\nNote: AUC in the 0.60-0.70 range is expected with ~2200")
-        print("expert-labeled samples. The small dataset limits performance.")
-
-    print("\n" + "=" * 70)
-    print("Evaluation complete.")
-    print("=" * 70)
+    point, lo, hi, _ = metrics.bootstrap_auc_ci(y_test, test_probs)
+    print(f"\nTest AUC with uncertainty: {point:.4f}  95% CI [{lo:.4f}, {hi:.4f}]")
+    print("  This interval is wide because it rests on one 341-clip split.")
+    print("  Run `python -m model.crossval` for the 2,267-clip estimate.")
+    print("\n" + "=" * 72)
 
 
 if __name__ == "__main__":
