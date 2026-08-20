@@ -253,15 +253,17 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
     return model, mean, std, best_auc, best_epoch, epochs_run
 
 
-def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS):
+def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS, seed=CV_SEED):
     print("=" * 72)
     print(f"SickNote — nested 5-fold cross-validation")
-    print(f"  head={head}  select={select}  specaug={specaug}  max_epochs={max_epochs}")
+    print(f"  head={head}  select={select}  specaug={specaug}  max_epochs={max_epochs}  seed={seed}")
     print("=" * 72)
 
     # Each criterion writes to its own directory so ablation runs never
     # overwrite one another.
     tag = f"{head}__{select}__ep{max_epochs}" + ("__specaug" if specaug else "")
+    if seed != CV_SEED:
+        tag += f"__seed{seed}"
     out_dir = os.path.join(CV_CHECKPOINT_DIR, tag)
     os.makedirs(out_dir, exist_ok=True)
     t_start = time.time()
@@ -280,11 +282,11 @@ def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS):
     for fold in range(N_FOLDS):
         test_idx = np.flatnonzero(fold_of == fold)
         rest_idx = np.flatnonzero(fold_of != fold)
-        train_idx, val_idx = stratified_split(rest_idx, y, CV_VAL_FRACTION, CV_SEED + fold)
+        train_idx, val_idx = stratified_split(rest_idx, y, CV_VAL_FRACTION, seed + fold)
 
         t0 = time.time()
         model, mean, std, best_val_auc, best_epoch, epochs = train_fold(
-            X, y, train_idx, val_idx, fold, CV_SEED + fold, curve_rows,
+            X, y, train_idx, val_idx, fold, seed + fold, curve_rows,
             select=select, head=head, specaug=specaug, max_epochs=max_epochs
         )
 
@@ -378,7 +380,11 @@ if __name__ == "__main__":
                     help="classifier head (default: flatten, the historical behaviour)")
     ap.add_argument("--specaug", action="store_true",
                     help="mask random frequency and time bands during training")
+    ap.add_argument("--seed", type=int, default=CV_SEED,
+                    help="training seed: weight init, batch order, inner val split. "
+                         "Fold assignment is NOT affected, so runs stay comparable.")
     ap.add_argument("--epochs", type=int, default=EPOCHS,
                     help=f"epoch cap (default: {EPOCHS} from config.py)")
     args = ap.parse_args()
-    main(select=args.select, head=args.head, specaug=args.specaug, max_epochs=args.epochs)
+    main(select=args.select, head=args.head, specaug=args.specaug,
+         max_epochs=args.epochs, seed=args.seed)
