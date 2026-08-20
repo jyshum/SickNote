@@ -38,6 +38,40 @@ from model.config import (
 
 SMOOTH_WINDOW = 3  # epochs averaged by the val_auc_smooth criterion
 
+# SpecAugment masks, sized for a 64 x 345 spectrogram. Deliberately milder
+# than the speech-recognition defaults — 1,542 training clips is not much to
+# hide parts of.
+FREQ_MASKS, FREQ_PARAM = 2, 12   # up to 2 bands of <=12 of 64 mel bins
+TIME_MASKS, TIME_PARAM = 2, 40   # up to 2 bands of <=40 of 345 frames
+
+
+def spec_augment(x, rng):
+    """Black out random frequency and time bands. Training only.
+
+    Applied AFTER normalisation, so a masked region is set to 0 — which is the
+    dataset mean, i.e. "no information here" rather than "silence". Silence has
+    its own meaning in a spectrogram and we do not want to fake it.
+
+    Unlike augmenting the waveform (noise injection, time stretching, both
+    tried and dropped earlier in this project), nothing here distorts the
+    signal. Whatever survives the mask is untouched real audio; the model just
+    cannot lean on any single frequency band or moment to make its decision.
+    """
+    x = x.clone()
+    n, _, n_mels, n_frames = x.shape
+    for i in range(n):
+        for _ in range(FREQ_MASKS):
+            f = int(rng.integers(0, FREQ_PARAM + 1))
+            if f:
+                f0 = int(rng.integers(0, n_mels - f + 1))
+                x[i, :, f0:f0 + f, :] = 0.0
+        for _ in range(TIME_MASKS):
+            t = int(rng.integers(0, TIME_PARAM + 1))
+            if t:
+                t0 = int(rng.integers(0, n_frames - t + 1))
+                x[i, :, :, t0:t0 + t] = 0.0
+    return x
+
 
 def selection_score(metric, val_auc_history, val_loss_history):
     """Higher is better, for every criterion.
@@ -128,7 +162,8 @@ def predict(model, X, idx, mean, std, batch_size=256):
     return torch.cat(out).numpy()
 
 
-def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc", head="flatten"):
+def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc",
+               head="flatten", specaug=False, max_epochs=EPOCHS):
     """Train one fold's model, returning the weights the criterion liked best.
 
     `select` chooses the early-stopping criterion — see selection_score().
@@ -161,12 +196,15 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
     best_state, patience, epochs_run = None, 0, 0
     auc_history, loss_history = [], []
 
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, max_epochs + 1):
         epochs_run = epoch
         model.train()
         running = 0.0
         for b in _batches(len(train_idx), BATCH_SIZE, shuffle=True, rng=rng):
-            xb = ((train_x[b] - mean) / std).to(DEVICE)
+            xb = (train_x[b] - mean) / std
+            if specaug:
+                xb = spec_augment(xb, rng)
+            xb = xb.to(DEVICE)
             yb = y_train[b].to(DEVICE)
             optimizer.zero_grad()
             loss = criterion(model(xb), yb)
@@ -215,14 +253,16 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
     return model, mean, std, best_auc, best_epoch, epochs_run
 
 
-def main(select="val_auc", head="flatten"):
+def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS):
     print("=" * 72)
-    print(f"SickNote — nested 5-fold cross-validation  [head={head}, early stopping on {select}]")
+    print(f"SickNote — nested 5-fold cross-validation")
+    print(f"  head={head}  select={select}  specaug={specaug}  max_epochs={max_epochs}")
     print("=" * 72)
 
     # Each criterion writes to its own directory so ablation runs never
     # overwrite one another.
-    out_dir = os.path.join(CV_CHECKPOINT_DIR, f"{head}__{select}")
+    tag = f"{head}__{select}__ep{max_epochs}" + ("__specaug" if specaug else "")
+    out_dir = os.path.join(CV_CHECKPOINT_DIR, tag)
     os.makedirs(out_dir, exist_ok=True)
     t_start = time.time()
 
@@ -245,7 +285,7 @@ def main(select="val_auc", head="flatten"):
         t0 = time.time()
         model, mean, std, best_val_auc, best_epoch, epochs = train_fold(
             X, y, train_idx, val_idx, fold, CV_SEED + fold, curve_rows,
-            select=select, head=head
+            select=select, head=head, specaug=specaug, max_epochs=max_epochs
         )
 
         val_probs = predict(model, X, val_idx, mean, std)
@@ -316,6 +356,8 @@ def main(select="val_auc", head="flatten"):
             "youden_reference_threshold": yj_thr,
             "early_stopping_metric": select,
             "head": head,
+            "specaug": specaug,
+            "max_epochs": max_epochs,
             "n_parameters": n_params,
         }, f, indent=2)
 
@@ -334,5 +376,9 @@ if __name__ == "__main__":
                     help="early-stopping criterion (default: val_auc, the historical behaviour)")
     ap.add_argument("--head", default="flatten", choices=["flatten", "pool_time"],
                     help="classifier head (default: flatten, the historical behaviour)")
+    ap.add_argument("--specaug", action="store_true",
+                    help="mask random frequency and time bands during training")
+    ap.add_argument("--epochs", type=int, default=EPOCHS,
+                    help=f"epoch cap (default: {EPOCHS} from config.py)")
     args = ap.parse_args()
-    main(select=args.select, head=args.head)
+    main(select=args.select, head=args.head, specaug=args.specaug, max_epochs=args.epochs)
