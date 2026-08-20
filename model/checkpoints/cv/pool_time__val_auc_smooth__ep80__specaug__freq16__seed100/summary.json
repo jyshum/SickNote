@@ -1,0 +1,29 @@
+{
+  "n_clips": 2267,
+  "n_folds": 5,
+  "pooled_auc": 0.7070334363882262,
+  "ci_low": 0.6803557762388703,
+  "ci_high": 0.7358050200221244,
+  "fold_aucs": [
+    0.759787322521238,
+    0.7321148982295556,
+    0.6896302541250151,
+    0.7034204504396001,
+    0.7407262435264362
+  ],
+  "fold_thresholds": [
+    0.42,
+    0.56,
+    0.55,
+    0.42,
+    0.44
+  ],
+  "min_sensitivity": 0.8,
+  "youden_reference_threshold": 0.48,
+  "early_stopping_metric": "val_auc_smooth",
+  "head": "pool_time",
+  "pool": "freq16",
+  "specaug": true,
+  "max_epochs": 80,
+  "n_parameters": 137329
+}

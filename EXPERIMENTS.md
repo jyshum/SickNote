@@ -111,11 +111,13 @@ Three training seeds per configuration. Fold assignment held fixed, so every
 run is scored on identical clips; only weight init, batch order, and the inner
 val split vary.
 
-| config | per-seed AUC | mean | std | 5-model ensemble |
-|---|---|---|---|---|
-| flatten (original) | 0.6745 / 0.6928 / 0.6840 | **0.6838** | 0.0091 | 0.6971 |
-| pool over time | 0.7109 / 0.7146 / 0.6997 | **0.7084** | 0.0078 | 0.7233 |
-| pool + SpecAugment | 0.7171 / 0.7179 / 0.7219 | **0.7190** | 0.0025 | **0.7266** |
+| config | per-seed AUC | mean | std | ensemble | params |
+|---|---|---|---|---|---|
+| flatten (original) | 0.6745 / 0.6928 / 0.6840 | **0.6838** | 0.0091 | 0.6971 | 1,415,281 |
+| pool over time | 0.7109 / 0.7146 / 0.6997 | **0.7084** | 0.0078 | 0.7233 | 71,793 |
+| pool + SpecAugment | 0.7171 / 0.7179 / 0.7219 | **0.7190** | 0.0025 | **0.7266** | 71,793 |
+| + freq16 pooling | 0.7070 / 0.7084 / 0.7134 | 0.7096 | 0.0034 | 0.7212 | 137,329 |
+| + freq32 pooling | 0.7165 / 0.7119 / 0.7246 | 0.7177 | 0.0064 | 0.7287 | 268,401 |
 
 **Headline: 0.6971 → 0.7266 ensemble AUC, at 1/20th the parameters.**
 
@@ -169,9 +171,35 @@ signal. Whatever survives the mask is untouched real audio.
 |---|---|---|
 | epoch cap 80 → 250 | `-0.0016 [-0.0031, -0.0002]`, 0/5 folds | no. Only fold 0 was hitting the cap; training it to 135 epochs made it *worse* |
 | early-stopping criterion | `<0.004` across `val_auc` / `val_loss` / `val_auc_smooth` | no. Well inside the CI |
+| asymmetric pooling | freq16 `-0.0094`, 0/3 seeds. freq32 `-0.0013` | no |
 
-Both were cheap to rule out (~2 min each) and would otherwise have sat in the
-repo forever looking plausible.
+**Asymmetric pooling deserves a note, because the reasoning was good and the
+result still said no.** §6 argues that pooling over frequency destroys
+diagnostic band information, and `MaxPool2d(2)` three times takes 64 mel bins
+down to 8. Keeping more frequency resolution — `freq16` (64→16) and `freq32`
+(64→32), pooling time just as hard — should have helped.
+
+It did not. `freq16` is clearly worse; `freq32` is a wash. And the ordering is
+**non-monotonic** (sym 0.7190, freq16 0.7096, freq32 0.7177), which is the
+signature of three configurations that are actually equivalent, with ±0.01
+noise on top.
+
+Two caveats that keep this from being a clean refutation of §6:
+
+- **The test was confounded with capacity.** Keeping frequency resolution
+  widens the classifier input, so `freq16` has 1.9× and `freq32` has 3.7× the
+  parameters. Any gain from resolution was paid for with more memorisation
+  capacity. A clean test would hold parameters fixed by narrowing the
+  classifier to compensate.
+- `freq32` does have the best ensemble (0.7287) and the best operating point
+  (specificity 0.5184, 222 false alarms vs 236). Both are within noise at 3
+  seeds, but it is the one variant worth revisiting if it is ever param-matched.
+
+The honest conclusion is that 8 mel bins may simply be enough resolution for
+this task, or that label noise is masking the difference.
+
+The two null results above were cheap to rule out (~2 min each) and would
+otherwise have sat in the repo forever looking plausible.
 
 ---
 
@@ -294,12 +322,18 @@ symlinked or regenerated with `python -m model.preprocess`.
 
 ## 9. Next
 
-1. **Asymmetric pooling** — `MaxPool2d((1,2))` or `(2,4)`, crushing time while
-   preserving frequency resolution. Free in parameters, motivated directly by
-   §6. Highest expected value.
-2. **Nested ensemble measurement** — before shipping, since deployment
-   ensembles and we have only measured single models.
+1. **Nested ensemble measurement** — before shipping anything, since deployment
+   averages five models and every number here is single-model. Train N models
+   per fold, average them, score the held-out fold. ~25 runs, ~10 minutes.
+2. **Param-matched frequency resolution** — `freq32` with the classifier
+   narrowed (128 → 48 units) so it lands at ~72K parameters, matching the
+   baseline. That is the clean version of the §4 test and the only way to know
+   whether frequency resolution or capacity was responsible.
 3. **Widening the trunk to `[16,32,64]`** — the trunk has been 6,000 parameters
    throughout and is now 8% of the model. But the loss curves still show mild
    *over*fitting (train 0.193 < val 0.247), so adding capacity is arguably the
-   wrong direction. Test it isolated (hold the head size fixed) or not at all.
+   wrong direction, and the `freq16`/`freq32` results are weak evidence that
+   extra capacity does not help here. Low priority.
+
+A note on hit rate: **one idea out of five worked.** That is normal, and the
+only reason it is knowable is that the harness came first.

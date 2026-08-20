@@ -163,7 +163,7 @@ def predict(model, X, idx, mean, std, batch_size=256):
 
 
 def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc",
-               head="flatten", specaug=False, max_epochs=EPOCHS):
+               head="flatten", specaug=False, max_epochs=EPOCHS, pool="sym"):
     """Train one fold's model, returning the weights the criterion liked best.
 
     `select` chooses the early-stopping criterion — see selection_score().
@@ -182,7 +182,8 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
     n_neg = len(train_idx) - n_pos
     pos_weight = torch.tensor([n_neg / n_pos], dtype=torch.float32, device=DEVICE)
 
-    model = SickNoteCNN(n_mels=X.shape[2], time_frames=X.shape[3], head=head).to(DEVICE)
+    model = SickNoteCNN(n_mels=X.shape[2], time_frames=X.shape[3],
+                        head=head, pool=pool).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -253,15 +254,18 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
     return model, mean, std, best_auc, best_epoch, epochs_run
 
 
-def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS, seed=CV_SEED):
+def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS,
+         seed=CV_SEED, pool="sym"):
     print("=" * 72)
     print(f"SickNote — nested 5-fold cross-validation")
-    print(f"  head={head}  select={select}  specaug={specaug}  max_epochs={max_epochs}  seed={seed}")
+    print(f"  head={head}  pool={pool}  select={select}  specaug={specaug}  max_epochs={max_epochs}  seed={seed}")
     print("=" * 72)
 
     # Each criterion writes to its own directory so ablation runs never
     # overwrite one another.
     tag = f"{head}__{select}__ep{max_epochs}" + ("__specaug" if specaug else "")
+    if pool != "sym":
+        tag += f"__{pool}"
     if seed != CV_SEED:
         tag += f"__seed{seed}"
     out_dir = os.path.join(CV_CHECKPOINT_DIR, tag)
@@ -269,7 +273,7 @@ def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS, see
     t_start = time.time()
 
     X, y, uuids = load_dataset()
-    probe = SickNoteCNN(n_mels=X.shape[2], time_frames=X.shape[3], head=head)
+    probe = SickNoteCNN(n_mels=X.shape[2], time_frames=X.shape[3], head=head, pool=pool)
     n_params = sum(p.numel() for p in probe.parameters())
     print(f"\nDevice: {DEVICE}   head: {head}   parameters: {n_params:,}")
     print(f"Clips: {len(y)}  (abnormal={int(y.sum())}, healthy={len(y) - int(y.sum())})")
@@ -287,7 +291,7 @@ def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS, see
         t0 = time.time()
         model, mean, std, best_val_auc, best_epoch, epochs = train_fold(
             X, y, train_idx, val_idx, fold, seed + fold, curve_rows,
-            select=select, head=head, specaug=specaug, max_epochs=max_epochs
+            select=select, head=head, specaug=specaug, max_epochs=max_epochs, pool=pool
         )
 
         val_probs = predict(model, X, val_idx, mean, std)
@@ -358,6 +362,7 @@ def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS, see
             "youden_reference_threshold": yj_thr,
             "early_stopping_metric": select,
             "head": head,
+            "pool": pool,
             "specaug": specaug,
             "max_epochs": max_epochs,
             "n_parameters": n_params,
@@ -380,6 +385,8 @@ if __name__ == "__main__":
                     help="classifier head (default: flatten, the historical behaviour)")
     ap.add_argument("--specaug", action="store_true",
                     help="mask random frequency and time bands during training")
+    ap.add_argument("--pool", default="sym", choices=["sym", "freq16", "freq32"],
+                    help="pooling shape per block; sym is the original 2x2 (see architecture.py)")
     ap.add_argument("--seed", type=int, default=CV_SEED,
                     help="training seed: weight init, batch order, inner val split. "
                          "Fold assignment is NOT affected, so runs stay comparable.")
@@ -387,4 +394,4 @@ if __name__ == "__main__":
                     help=f"epoch cap (default: {EPOCHS} from config.py)")
     args = ap.parse_args()
     main(select=args.select, head=args.head, specaug=args.specaug,
-         max_epochs=args.epochs, seed=args.seed)
+         max_epochs=args.epochs, seed=args.seed, pool=args.pool)

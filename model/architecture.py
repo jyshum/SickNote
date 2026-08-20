@@ -27,21 +27,40 @@ class SickNoteCNN(nn.Module):
             Default is "flatten" so existing checkpoints keep loading.
     """
 
-    def __init__(self, n_mels, time_frames, head="flatten"):
+    # Pooling shapes as (frequency, time) per block.
+    #
+    # "sym" halves both axes three times, so 64 mel bins become 8 — 87% of the
+    # frequency resolution is gone before the classifier sees anything. That is
+    # a copy of a computer-vision default, and the two axes here are not alike:
+    # pooling over time asks "did this happen at any point" (fine), pooling over
+    # frequency asks "did this happen at any pitch" (destroys the band, which is
+    # what distinguishes a wheeze). The other options pool time hard and keep
+    # more frequency. See EXPERIMENTS.md section 6.
+    POOL_SHAPES = {
+        "sym":    [(2, 2), (2, 2), (2, 2)],   # 64 -> 8 mel   (the original)
+        "freq16": [(2, 2), (2, 2), (1, 2)],   # 64 -> 16 mel
+        "freq32": [(2, 2), (1, 2), (1, 2)],   # 64 -> 32 mel
+    }
+
+    def __init__(self, n_mels, time_frames, head="flatten", pool="sym"):
         super().__init__()
         channels = config.CONV_CHANNELS  # [8, 16, 32]
         k = config.KERNEL_SIZE           # 3
         self.head = head
+        self.pool = pool
+        if pool not in self.POOL_SHAPES:
+            raise ValueError(f"unknown pool: {pool}")
+        p0, p1, p2 = self.POOL_SHAPES[pool]
 
         self.conv = nn.Sequential(
             nn.Conv2d(1, channels[0], k, padding=1), nn.BatchNorm2d(channels[0]),
-            nn.ReLU(), nn.MaxPool2d(2),
+            nn.ReLU(), nn.MaxPool2d(p0),
 
             nn.Conv2d(channels[0], channels[1], k, padding=1), nn.BatchNorm2d(channels[1]),
-            nn.ReLU(), nn.MaxPool2d(2),
+            nn.ReLU(), nn.MaxPool2d(p1),
 
             nn.Conv2d(channels[1], channels[2], k, padding=1), nn.BatchNorm2d(channels[2]),
-            nn.ReLU(), nn.MaxPool2d(2),
+            nn.ReLU(), nn.MaxPool2d(p2),
         )
         self._flatten_dim = self._get_feature_dim(n_mels, time_frames)
 

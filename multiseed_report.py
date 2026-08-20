@@ -27,6 +27,8 @@ CONFIGS = {
     "flatten":             "flatten__val_auc_smooth__ep80__seed{s}",
     "pool_time":           "pool_time__val_auc_smooth__ep80__seed{s}",
     "pool_time +specaug":  "pool_time__val_auc_smooth__ep80__specaug__seed{s}",
+    "+specaug freq16":     "pool_time__val_auc_smooth__ep80__specaug__freq16__seed{s}",
+    "+specaug freq32":     "pool_time__val_auc_smooth__ep80__specaug__freq32__seed{s}",
 }
 
 
@@ -58,7 +60,7 @@ def main():
         print(f"{name:<22}{aucs.mean():>9.4f}{aucs.std(ddof=1):>9.4f}"
               f"{ens:>11.4f}{ens - aucs.mean():>+8.4f}")
 
-    a_name, b_name = list(CONFIGS)[-2:]
+    a_name, b_name = "pool_time +specaug", "+specaug freq16"
     y, a_aucs, a_probs = results[a_name]
     _, b_aucs, b_probs = results[b_name]
 
