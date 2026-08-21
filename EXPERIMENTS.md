@@ -172,6 +172,17 @@ signal. Whatever survives the mask is untouched real audio.
 | epoch cap 80 → 250 | `-0.0016 [-0.0031, -0.0002]`, 0/5 folds | no. Only fold 0 was hitting the cap; training it to 135 epochs made it *worse* |
 | early-stopping criterion | `<0.004` across `val_auc` / `val_loss` / `val_auc_smooth` | no. Well inside the CI |
 | asymmetric pooling | freq16 `-0.0094`, 0/3 seeds. freq32 `-0.0013` | no |
+| widening trunk `[8,16,32]` → `[16,32,64]` | `-0.0060`, **0/3 seeds** | no |
+
+**Trunk widening is the cleanest confirmation that capacity is not the
+constraint.** The loss curves predicted this — the model was still mildly
+*over*fitting (train 0.193 < val 0.247), and you do not fix overfitting by
+adding parameters. Doubling every conv layer cost 2.2× the parameters
+(71,793 → 154,849) and **23× the training time** (~90s → ~2,070s per 5-fold
+run), and every seed came out worse.
+
+The trunk has been 6,000 parameters since the beginning of the project. It
+turns out that was never the problem.
 
 **Asymmetric pooling deserves a note, because the reasoning was good and the
 result still said no.** §6 argues that pooling over frequency destroys
@@ -396,11 +407,12 @@ symlinked or regenerated with `python -m model.preprocess`.
    narrowed (128 → 48 units) so it lands at ~72K parameters, matching the
    baseline. That is the clean version of the §4 test and the only way to know
    whether frequency resolution or capacity was responsible.
-3. **Widening the trunk to `[16,32,64]`** — the trunk has been 6,000 parameters
-   throughout and is now 8% of the model. But the loss curves still show mild
-   *over*fitting (train 0.193 < val 0.247), so adding capacity is arguably the
-   wrong direction, and the `freq16`/`freq32` results are weak evidence that
-   extra capacity does not help here. Low priority.
+3. **Accept the ceiling.** Five of seven ideas came back null, all of them
+   capacity- or training-related. `stats_experiment/REPORT.md` §6.3 estimates
+   Bayes-optimal AUC at 0.65–0.72 for COUGHVID given its label noise, and
+   §4b measures 0.7238. Further architecture work is very likely wasted; the
+   remaining levers are better labels or more data, not a better model.
 
-A note on hit rate: **one idea out of five worked.** That is normal, and the
-only reason it is knowable is that the harness came first.
+A note on hit rate: **two ideas out of seven worked** (the pooling head, and
+SpecAugment for stability). That is normal, and the only reason it is knowable
+is that the harness came first.

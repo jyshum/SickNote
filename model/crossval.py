@@ -27,6 +27,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from model import config as _config
 from model import metrics
 from model.architecture import SickNoteCNN
 from model.config import (
@@ -255,7 +256,11 @@ def train_fold(X, y, train_idx, val_idx, fold, seed, curve_rows, select="val_auc
 
 
 def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS,
-         seed=CV_SEED, pool="sym"):
+         seed=CV_SEED, pool="sym", channels=None):
+    # architecture.py reads config.CONV_CHANNELS at construction time, so this
+    # has to be set before any model is built.
+    if channels is not None:
+        _config.CONV_CHANNELS = channels
     print("=" * 72)
     print(f"SickNote — nested 5-fold cross-validation")
     print(f"  head={head}  pool={pool}  select={select}  specaug={specaug}  max_epochs={max_epochs}  seed={seed}")
@@ -266,6 +271,8 @@ def main(select="val_auc", head="flatten", specaug=False, max_epochs=EPOCHS,
     tag = f"{head}__{select}__ep{max_epochs}" + ("__specaug" if specaug else "")
     if pool != "sym":
         tag += f"__{pool}"
+    if channels is not None:
+        tag += "__ch" + "-".join(str(c) for c in channels)
     if seed != CV_SEED:
         tag += f"__seed{seed}"
     out_dir = os.path.join(CV_CHECKPOINT_DIR, tag)
@@ -385,6 +392,8 @@ if __name__ == "__main__":
                     help="classifier head (default: flatten, the historical behaviour)")
     ap.add_argument("--specaug", action="store_true",
                     help="mask random frequency and time bands during training")
+    ap.add_argument("--channels", default=None,
+                    help="conv channels as e.g. 16,32,64 (default: config.CONV_CHANNELS)")
     ap.add_argument("--pool", default="sym", choices=["sym", "freq16", "freq32"],
                     help="pooling shape per block; sym is the original 2x2 (see architecture.py)")
     ap.add_argument("--seed", type=int, default=CV_SEED,
@@ -394,4 +403,5 @@ if __name__ == "__main__":
                     help=f"epoch cap (default: {EPOCHS} from config.py)")
     args = ap.parse_args()
     main(select=args.select, head=args.head, specaug=args.specaug,
-         max_epochs=args.epochs, seed=args.seed, pool=args.pool)
+         max_epochs=args.epochs, seed=args.seed, pool=args.pool,
+         channels=[int(c) for c in args.channels.split(',')] if args.channels else None)
