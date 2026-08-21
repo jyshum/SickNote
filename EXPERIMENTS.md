@@ -203,6 +203,66 @@ otherwise have sat in the repo forever looking plausible.
 
 ---
 
+## 4b. The ensemble, measured honestly
+
+Everything above compares **single models**. The app ships an average of five.
+Those are different systems, and plain cross-validation cannot measure the
+second one: each clip sits in four of the five fold models' training data, so
+no clip exists that all five are innocent of.
+
+`model/ensemble_cv.py` nests the ensemble inside each fold — train N models on
+folds ≠ k, all innocent of fold k, average their probabilities on fold k. The
+inner train/val split is held fixed within a fold so members differ only by
+initialisation, which is exactly what the shipped model does.
+
+**Deployed architecture vs proposed, both as 5-model ensembles:**
+
+| | mean single | 5-model ensemble | 95% CI | ensemble gain |
+|---|---|---|---|---|
+| deployed (flatten) | 0.6798 | 0.6931 | [0.6661, 0.7212] | +0.0133 |
+| proposed (pool + SpecAugment) | 0.7161 | **0.7238** | [0.6987, 0.7504] | +0.0077 |
+
+Paired: **`+0.0308 [+0.0137, +0.0494]`, 5/5 folds, P(better) 0.999.** CI
+excludes zero. This is the only apples-to-apples number in the project — what
+ships today against what would ship after the change, each measured the way it
+actually runs.
+
+**Ensembling is worth far less than the architecture change.** `+0.0077`
+against `+0.0308`. Averaging five copies of a weak model does not rescue it.
+
+**The size curve saturates by three members:**
+
+```
+                deployed        proposed
+1 member         0.6798          0.7161
+2 members        0.6879          0.7209
+3 members        0.6908          0.7225
+4 members        0.6922          0.7233
+5 members        0.6931          0.7238
+```
+
+Three members capture ~83% of the ensemble benefit in both cases. Members 4
+and 5 are worth `+0.0013` combined — deep inside noise. **Dropping from 5 to 3
+models would cut inference cost and storage by 40% for no measurable loss.**
+
+**Note which model benefits more from ensembling.** The flatten head gains
+`+0.0133`, the regularised one only `+0.0077`. That is consistent and
+expected: ensembling works by averaging away variance, and §4 showed
+SpecAugment already cut seed-to-seed std from 0.0078 to 0.0025. There is
+simply less variance left for the ensemble to remove. The two techniques
+overlap rather than add — the same conclusion §4 reached from a different
+direction.
+
+**Operating point at the 0.80 sensitivity floor** (per-fold thresholds
+selected on validation):
+
+```
+deployed   sens 0.8051   spec 0.4794   missed 352   false alarms 240
+proposed   sens 0.8029   spec 0.5054   missed 356   false alarms 228
+```
+
+---
+
 ## 5. Threshold policy
 
 SickNote is a screening tool. A missed abnormal cough costs more than a false
@@ -286,11 +346,14 @@ estimates a Bayes-optimal AUC around 0.65–0.72 for this task and notes that a
 ResNet18 transfer-learning attempt and a larger-capacity model both failed to
 improve on it. We are plausibly near that ceiling already.
 
-**The ensemble is not yet honestly measured.** Out-of-fold predictions come
-from single models. The deployed app averages five. The seed-averaged
-"ensemble" column above averages across *seeds*, not across fold models, so it
-is indicative rather than exact. A proper nested-ensemble measurement (train
-N models per fold, average, score the held-out fold) has not been run.
+**The ensemble is now measured** — see §4b. One caveat remains: fold ensembles
+train on 4/5 of the data while the deployed ensemble trains on all of it, so
+the real deployed number should be slightly better than 0.7238.
+
+**Ensemble members differ only by initialisation.** The inner train/val split
+is held fixed within each fold, matching current deployment. Varying the split
+per member would produce more diverse members and probably a better ensemble
+(closer to bagging). Untested.
 
 ---
 
@@ -322,9 +385,13 @@ symlinked or regenerated with `python -m model.preprocess`.
 
 ## 9. Next
 
-1. **Nested ensemble measurement** — before shipping anything, since deployment
-   averages five models and every number here is single-model. Train N models
-   per fold, average them, score the held-out fold. ~25 runs, ~10 minutes.
+1. **Ship it.** §4b closes the last measurement gap: `0.6931 -> 0.7238`
+   ensemble-to-ensemble, 5/5 folds, CI excludes zero. Swapping the head to
+   `pool_time`, enabling SpecAugment, and cutting the ensemble from 5 members
+   to 3 is now supported by measurement rather than by argument. Requires
+   retraining production checkpoints and updating `api/inference.py` and
+   `config.py` (`THRESHOLD` should come from the validation-selected value,
+   not the current 0.52).
 2. **Param-matched frequency resolution** — `freq32` with the classifier
    narrowed (128 → 48 units) so it lands at ~72K parameters, matching the
    baseline. That is the clean version of the §4 test and the only way to know
