@@ -7,6 +7,7 @@ Usage: PYTORCH_ENABLE_MPS_FALLBACK=1 python -m model.train
 """
 import os
 import shutil
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -18,10 +19,16 @@ from model.config import (
 )
 from model.dataset import CoughDataset
 from model.architecture import SickNoteCNN
+from model.augment import spec_augment
 
 
-def train_single(seed=42, suffix=""):
+def train_single(seed=42, suffix="", head="pool_time", pool="sym", specaug=True):
     """Train one SickNoteCNN model with a given seed.
+
+    Defaults are the configuration EXPERIMENTS.md section 4b measured as best:
+    a pooling head over time, symmetric pooling, and SpecAugment on. They are
+    defaults rather than caller arguments so that running this module with no
+    flags ships what was measured.
 
     Returns the best val_AUC achieved. Saves checkpoint to
     model_final{suffix}.pt (e.g. model_final_0.pt for ensemble member 0).
@@ -79,7 +86,10 @@ def train_single(seed=42, suffix=""):
     # ------------------------------------------------------------------
     # 4. Model, loss, optimizer, scheduler
     # ------------------------------------------------------------------
-    model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames).to(DEVICE)
+    model = SickNoteCNN(
+        n_mels=n_mels, time_frames=time_frames, head=head, pool=pool
+    ).to(DEVICE)
+    print(f"Head: {head} | Pool: {pool} | SpecAugment: {specaug}")
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -97,11 +107,16 @@ def train_single(seed=42, suffix=""):
     best_path = os.path.join(CHECKPOINT_DIR, f"model_best{suffix}.pt")
     final_path = os.path.join(CHECKPOINT_DIR, f"model_final{suffix}.pt")
 
+    # Owned here so a given seed reproduces the same masks run to run.
+    aug_rng = np.random.default_rng(seed)
+
     for epoch in range(1, EPOCHS + 1):
         # ---- Train ----
         model.train()
         running_loss = 0.0
         for spectrograms, labels in train_loader:
+            if specaug:
+                spectrograms = spec_augment(spectrograms, aug_rng)
             spectrograms = spectrograms.to(DEVICE)
             labels = labels.unsqueeze(1).to(DEVICE)  # (batch,) → (batch, 1)
 
@@ -177,20 +192,24 @@ def train_single(seed=42, suffix=""):
     return best_val_auc
 
 
-ENSEMBLE_SEEDS = [42, 123, 456, 789, 1024]
+# Three, not five. EXPERIMENTS.md section 4b measured the ensemble size curve:
+# members 4 and 5 are worth +0.0013 combined, well inside noise, for 40% more
+# inference cost and storage. These are the first three of the original five,
+# so the shipped ensemble is a strict subset of what came before.
+ENSEMBLE_SEEDS = [42, 123, 456]
 
 
 def main():
-    """Train a single model or an ensemble of 5 models.
+    """Train a single model or the production ensemble.
 
     Usage:
         python -m model.train              # single model (seed=42)
-        python -m model.train --ensemble   # 5 models with different seeds
+        python -m model.train --ensemble   # the 3-model production ensemble
     """
     import sys
 
     if "--ensemble" in sys.argv:
-        print("Training ensemble of 5 models...")
+        print(f"Training ensemble of {len(ENSEMBLE_SEEDS)} models...")
         aucs = []
         for i, seed in enumerate(ENSEMBLE_SEEDS):
             auc = train_single(seed=seed, suffix=f"_{i}")
@@ -201,7 +220,7 @@ def main():
         for i, auc in enumerate(aucs):
             print(f"  Model {i} (seed={ENSEMBLE_SEEDS[i]}): val_AUC={auc:.4f}")
         print(f"  Mean val_AUC: {sum(aucs)/len(aucs):.4f}")
-        print(f"  Saved: model_final_0.pt through model_final_4.pt")
+        print(f"  Saved: model_final_0.pt through model_final_{len(ENSEMBLE_SEEDS)-1}.pt")
     else:
         train_single(seed=42)
 
