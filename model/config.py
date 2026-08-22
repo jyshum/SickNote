@@ -24,7 +24,14 @@ CONV_CHANNELS = [8, 16, 32]
 KERNEL_SIZE = 3
 
 # Evaluation
-THRESHOLD = 0.52
+#
+# Selected on the VALIDATION split under the MIN_SENSITIVITY policy below,
+# never on test. The previous value (0.52) was the argmax of Youden's J
+# computed on the test set — see EXPERIMENTS.md section 3.
+#
+# Regenerate with:  PYTHONPATH=. python -m model.derive_threshold
+# Derived: PENDING — Task 5 replaces this after the ensemble is trained.
+THRESHOLD = 0.50
 
 # Cross-validation (model/crossval.py)
 N_FOLDS = 5
