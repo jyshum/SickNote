@@ -23,6 +23,13 @@ EARLY_STOPPING_PATIENCE = 15
 CONV_CHANNELS = [8, 16, 32]
 KERNEL_SIZE = 3
 
+# Production architecture — the single source of truth. model/train.py,
+# model/derive_threshold.py and api/inference.py all read these rather than
+# each keeping a copy. EXPERIMENTS.md section 4b measured this configuration
+# at 0.7238 against 0.6931 for the flatten head it replaced.
+HEAD = "pool_time"
+POOL = "sym"
+
 # Evaluation
 #
 # Selected on the VALIDATION split under the MIN_SENSITIVITY policy below,

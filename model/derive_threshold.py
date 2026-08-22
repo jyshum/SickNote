@@ -17,13 +17,13 @@ import os
 import torch
 
 from model.architecture import SickNoteCNN
-from model.config import CHECKPOINT_DIR, MIN_SENSITIVITY
+from model.config import CHECKPOINT_DIR, HEAD, MIN_SENSITIVITY, POOL
 from model.dataset import CoughDataset
 from model.metrics import roc_auc, threshold_for_min_sensitivity
 from model.train import ENSEMBLE_SEEDS
 
 
-def ensemble_val_probabilities(head="pool_time", pool="sym"):
+def ensemble_val_probabilities(head=HEAD, pool=POOL):
     """Average the ensemble's probabilities over the production val split."""
     splits = torch.load(
         os.path.join(CHECKPOINT_DIR, "splits.pt"), weights_only=False

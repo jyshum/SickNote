@@ -15,14 +15,14 @@ from sklearn.metrics import roc_auc_score
 
 from model.config import (
     BATCH_SIZE, EPOCHS, LR, WEIGHT_DECAY,
-    EARLY_STOPPING_PATIENCE, CHECKPOINT_DIR, DEVICE,
+    EARLY_STOPPING_PATIENCE, CHECKPOINT_DIR, DEVICE, HEAD, POOL,
 )
 from model.dataset import CoughDataset
 from model.architecture import SickNoteCNN
 from model.augment import spec_augment
 
 
-def train_single(seed=42, suffix="", head="pool_time", pool="sym", specaug=True):
+def train_single(seed=42, suffix="", head=HEAD, pool=POOL, specaug=True):
     """Train one SickNoteCNN model with a given seed.
 
     Defaults are the configuration EXPERIMENTS.md section 4b measured as best:

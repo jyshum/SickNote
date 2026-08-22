@@ -39,3 +39,12 @@ class TestThresholdPolicy:
         thr, row, met = threshold_for_min_sensitivity(y, s, 0.99)
         assert met in (True, False)
         assert 0.0 <= thr <= 1.0
+
+    def test_architecture_constants_are_the_single_source_of_truth(self):
+        import inspect
+        from model.train import train_single
+        from model.derive_threshold import ensemble_val_probabilities
+        assert inspect.signature(train_single).parameters["head"].default == config.HEAD
+        assert inspect.signature(train_single).parameters["pool"].default == config.POOL
+        assert inspect.signature(ensemble_val_probabilities).parameters["head"].default == config.HEAD
+        assert inspect.signature(ensemble_val_probabilities).parameters["pool"].default == config.POOL
