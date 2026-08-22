@@ -30,6 +30,7 @@ import torch.nn as nn
 from model import config as _config
 from model import metrics
 from model.architecture import SickNoteCNN
+from model.augment import spec_augment
 from model.config import (
     BATCH_SIZE, EPOCHS, LR, WEIGHT_DECAY, EARLY_STOPPING_PATIENCE,
     CHECKPOINT_DIR, CV_CHECKPOINT_DIR, DEVICE,
@@ -38,40 +39,6 @@ from model.config import (
 
 
 SMOOTH_WINDOW = 3  # epochs averaged by the val_auc_smooth criterion
-
-# SpecAugment masks, sized for a 64 x 345 spectrogram. Deliberately milder
-# than the speech-recognition defaults — 1,542 training clips is not much to
-# hide parts of.
-FREQ_MASKS, FREQ_PARAM = 2, 12   # up to 2 bands of <=12 of 64 mel bins
-TIME_MASKS, TIME_PARAM = 2, 40   # up to 2 bands of <=40 of 345 frames
-
-
-def spec_augment(x, rng):
-    """Black out random frequency and time bands. Training only.
-
-    Applied AFTER normalisation, so a masked region is set to 0 — which is the
-    dataset mean, i.e. "no information here" rather than "silence". Silence has
-    its own meaning in a spectrogram and we do not want to fake it.
-
-    Unlike augmenting the waveform (noise injection, time stretching, both
-    tried and dropped earlier in this project), nothing here distorts the
-    signal. Whatever survives the mask is untouched real audio; the model just
-    cannot lean on any single frequency band or moment to make its decision.
-    """
-    x = x.clone()
-    n, _, n_mels, n_frames = x.shape
-    for i in range(n):
-        for _ in range(FREQ_MASKS):
-            f = int(rng.integers(0, FREQ_PARAM + 1))
-            if f:
-                f0 = int(rng.integers(0, n_mels - f + 1))
-                x[i, :, f0:f0 + f, :] = 0.0
-        for _ in range(TIME_MASKS):
-            t = int(rng.integers(0, TIME_PARAM + 1))
-            if t:
-                t0 = int(rng.integers(0, n_frames - t + 1))
-                x[i, :, :, t0:t0 + t] = 0.0
-    return x
 
 
 def selection_score(metric, val_auc_history, val_loss_history):
