@@ -3,8 +3,10 @@
 A running record of what was tried, what was measured, and what was ruled out.
 Every number here is reproducible from the code in this repo.
 
-**Status as of 2026-08-20.** Model architecture revamp, branch
-`worktree-cv-harness-pooling-head`.
+**Status as of 2026-08-22.** Sections 1–9 are the architecture revamp
+(branch `worktree-cv-harness-pooling-head`) and stand as written. Sections
+10–12 are a later audit of the *data* rather than the model, and they change
+how §4–§9 should be read — start there if you only read one part.
 
 ---
 
@@ -371,6 +373,9 @@ per member would produce more diverse members and probably a better ensemble
 ## 8. Reproducing
 
 ```bash
+# reproduce every number in section 10 (~40s)
+PYTHONPATH=. python -m model.audit
+
 # full 5-fold run, ~60s on MPS
 PYTORCH_ENABLE_MPS_FALLBACK=1 python -m model.crossval --head pool_time --select val_auc_smooth
 
@@ -396,6 +401,12 @@ symlinked or regenerated with `python -m model.preprocess`.
 
 ## 9. Next
 
+> **Superseded by §10–§12 (2026-08-22).** Item 1 below recommends shipping the
+> pooling head. That recommendation is still correct *relative to what ships
+> today*, but §10 shows a large share of the AUC it improves is recording
+> duration and gain rather than pathology, and §11 identifies a dataset with a
+> laboratory label and 31× the volume. Read §12 before acting on this list.
+
 1. **Ship it.** §4b closes the last measurement gap: `0.6931 -> 0.7238`
    ensemble-to-ensemble, 5/5 folds, CI excludes zero. Swapping the head to
    `pool_time`, enabling SpecAugment, and cutting the ensemble from 5 members
@@ -416,3 +427,327 @@ symlinked or regenerated with `python -m model.preprocess`.
 A note on hit rate: **two ideas out of seven worked** (the pooling head, and
 SpecAugment for stability). That is normal, and the only reason it is knowable
 is that the harness came first.
+
+---
+
+## 10. The measurement that reframes everything above
+
+**Status: 2026-08-22.** Sections 1–9 asked "which architecture is best?" and
+answered it carefully. This section asks a question nobody had asked: **how
+much of the 0.7238 is about coughs at all?**
+
+### 10.1 A model that hears nothing gets 0.6556
+
+Three scalars per clip, derived from the spectrogram with no learning:
+
+- `duration` — non-silent frames × hop ÷ sample rate
+- `peak` — loudest cell in the clip, dB
+- `mean_db` — mean dB over non-silent frames
+
+Fed to a logistic regression, 5-fold cross-validated on the same 2,267 clips:
+
+| feature | AUC |
+|---|---|
+| duration alone | 0.5655 |
+| peak dB alone | 0.5546 |
+| mean dB alone | 0.6300 |
+| **all three** | **0.6556** |
+| CNN ensemble (§4b) | 0.7238 |
+
+Above chance, the CNN's margin over "how long and how loud was the recording"
+is **+0.068**. That is the number this project actually earned.
+
+`mean_db` at 0.6300 is the one that should worry us. `preprocess.py` normalises
+with a **single global mean/std** — there is no per-clip normalisation — so
+recording gain reaches the network untouched. Microphone distance, browser AGC
+and device differences are all in that feature. None of them transfer to a
+deployment where the user records on their own phone.
+
+This is not a hypothesis about leakage. It is a measurement of it.
+
+### 10.2 The input is mostly empty
+
+Padding to 8 seconds happens **before** the mel transform, so short clips carry
+a block of constant −100 dB. Measured over all 2,267 clips:
+
+```
+fraction of frames that are digital silence   p50 0.122   p90 0.638   max 0.965
+                                              mean 0.236
+clips containing any padding                  0.690
+frames within 20 dB of the clip's peak        mean 0.151
+```
+
+A quarter of the average input is padding, and only ~15% of frames carry the
+cough. §4 justified max-pooling partly because average pooling "would leak how
+much of the clip is zero-padding" — §10.1 shows that leak is worth real AUC.
+
+Also: the pipeline normalises all 64 mel bins with one scalar, but the bins
+differ by **29.9 dB in mean** and 1.99× in std (400 clips, seed 0). The top
+bins — where turbulence and wetness live — get squashed into a narrow range
+before the first conv.
+
+### 10.3 The labels are close to noise, and it is measurable
+
+§7 called the labels "crowd-sourced physician majority votes." That is wrong
+for almost all of them:
+
+```
+clips labelled by exactly 1 expert    2,161  (95.3%)
+clips labelled by 3 experts               1
+clips labelled by 4 experts             105
+```
+
+(Rater counts are over the 2,267 clips we train on. The agreement statistics
+below use all 126 four-rater clips in the dataset — only 126 exist, and
+restricting to our filtered set would leave too few to measure.)
+
+There is no majority. There is one physician. On the 126 clips in the full
+dataset where all four rated, agreement between raters is:
+
+```
+two real doctors agree                74.2%
+two random guessers at that base rate 67.7%     <- chance
+mean pairwise Cohen's kappa           0.181     95% CI [0.103, 0.268]
+```
+
+κ = 0.181 is "slight" on the Landis–Koch scale. Diagnostic work wants 0.6+.
+The intuition that lands it:
+
+```
+a rubber stamp that answers "abnormal" to everything,
+with no audio at all, agrees with a real doctor       80.4%
+two real doctors agree with each other                74.2%
+```
+
+**A rubber stamp matches a physician better than another physician does.**
+
+A single expert scored against the majority of the other three gets sensitivity
+0.838, specificity 0.424 — **balanced accuracy 0.631**. The proposed model at
+its shipped operating point (sens 0.8029, spec 0.5054) gets **0.654**. The model
+is already at or just past the humans who wrote its labels. There is no
+architecture that fixes this.
+
+Caveat: n=126. The 4-expert subset is not obviously cherry-picked
+(cough_detected 0.878 vs 0.899 for single-rater clips; self-reported-healthy
+0.270 in both), but the abnormal rate differs sharply — see §10.4.
+
+Two related checks, in case a better-posed target existed:
+
+| target | kappa | verdict |
+|---|---|---|
+| diagnosis → abnormal | 0.181 | the current target |
+| cough_type → wet | 0.264 | better, still poor |
+| quality → good | 0.116 | experts cannot agree what a good recording is |
+| dyspnea / wheezing | — | not populated on multi-rater clips |
+
+### 10.4 The 80% abnormal base rate is a rater artifact
+
+```
+abnormal rate, 1-rater clips   0.918
+abnormal rate, 4-rater clips   0.762
+single-rater specificity       0.424
+```
+
+Single physicians call nearly everything abnormal, and 95% of the labels come
+from single physicians. Meanwhile 27% of these participants self-report as
+healthy. The class balance is a property of the raters, not the population.
+
+Consequence at the shipped threshold (sens 0.803 / spec 0.505):
+
+```
+prevalence 0.797 (as trained) -> PPV 0.864
+prevalence 0.30               -> PPV 0.410
+prevalence 0.15               -> PPV 0.223   78% of "abnormal" flags are wrong
+prevalence 0.05               -> PPV 0.079   92% wrong
+```
+
+SickNote is deployed to the general public, not to a cohort that is 80% ill.
+
+### 10.5 Self-report and expert diagnosis are independent
+
+COUGHVID also carries a self-reported `status`. On the 2,048 training clips
+that have both:
+
+```
+expert says →           healthy   abnormal
+self-reported healthy       155        498      76% called abnormal
+self-reported symptomatic   138        726      84%
+self-reported COVID-19      127        404      76%
+
+raw agreement 0.627     kappa 0.052
+```
+
+The expert abnormal rate barely moves with what the participant reports about
+their own health. **The two label sources are all but statistically
+independent.** Whatever the physicians were responding to, it was not illness.
+
+### 10.6 What is unused
+
+```
+clips with cough_detected > 0.8 and no expert label   16,091
+  ...of which carry a self-reported status            11,327
+  ...with no label of any kind                         4,764
+```
+
+Seven times the labelled set, same recording distribution, entirely untouched.
+
+---
+
+## 11. Dataset survey — what is actually obtainable
+
+Every row below was verified against the primary source, not a description of
+it. Licences were read from the licence file; availability was confirmed by
+requesting bytes.
+
+| dataset | licence | access | usable cough clips | label type |
+|---|---|---|---|---|
+| **UK COVID-19 Vocal Audio** | Open Government Licence v3.0 | open, download verified | **71,194** | PCR test |
+| **Coswara** (IISc) | CC BY 4.0 | open, download verified | ~2,100 heavy (+~2,100 shallow) | self-report, PCR subset |
+| Cambridge COVID-19 Sounds | academic-only agreement | institutional signatory | 459 | self-report |
+| Virufy | CC BY-NC-SA + addendum | open | 121 clips, **16 patients** | PCR |
+
+Both open datasets were confirmed downloadable with an unauthenticated ranged
+request (`HTTP 206`); the Coswara chunk verifies as a real gzip archive.
+
+**Cambridge is closed in practice.** The shareable subset is 459 samples from
+378 users — smaller than what we already have — and requires a Data Access
+Agreement signed by an institutionally authorised signatory, for academic
+research only. Its host also serves on an **expired TLS certificate**, which
+suggests the project is unmaintained.
+
+**Virufy is 16 patients.** PCR-referenced and therefore high quality, but far
+too small to train on. Possible use: a tiny gold-standard sanity check.
+
+**Do not use the Kaggle mirrors.** `himanshu007121/coswara-dataset` is listed
+as CC0 public domain; the real Coswara is CC BY 4.0. Third-party re-uploads
+misstate licences. Go to the primary source.
+
+### 11.1 The UK COVID-19 Vocal Audio Dataset
+
+Verified from the metadata files, not the description:
+
+```
+participants                72,999          PCR positive        25,706
+usable audio                71,194          PCR negative        47,036
+RT-qPCR                     68,068          exhalations @48kHz  72,999
+
+pre-built splits    train 20,717 · val 5,180 · test 11,121 · long 30,824
+matched splits      train  4,974 · test  1,968   (confounder-controlled)
+```
+
+**31× the labelled set we have, with a laboratory test in place of a
+physician's guess.** It additionally carries viral load and CT values, a
+14-symptom panel, asthma and smoking status, and influenza PCR results. Age and
+gender are populated for every participant — which makes the grouped-CV
+leakage check that §7 could not run on COUGHVID straightforward here.
+
+Licence is OGL v3.0: attribution only, commercial use permitted, no application
+and no account.
+
+### 11.2 The result that ships with it
+
+The dataset's companion paper is titled *"Audio-based AI classifiers show no
+evidence of improved COVID-19 screening over simple symptoms checkers"*
+([arXiv:2212.08570](https://arxiv.org/abs/2212.08570)).
+
+```
+unadjusted (naive splits)                    ROC-AUC 0.846 [0.838, 0.854]
+after matching age, gender, symptoms         ROC-AUC 0.619 [0.594, 0.644]
+```
+
+and the classifiers are beaten by a simple score over self-reported symptoms.
+
+**This is §10.1 at national scale.** UKHSA and the Alan Turing Institute, with
+67,842 participants, measured the same collapse we measured on 2,267 — apparent
+performance that is mostly confounding. That the two findings were reached
+independently, on different datasets, by different methods, is the strongest
+evidence in this document. It also means the `in_matched_*` splits are the only
+honest way to evaluate on this data, and they are provided.
+
+The unavoidable reading: **cough audio alone is a weak signal for infection
+status.** Not zero — 0.619 excludes 0.5 — but weak, and weaker than asking
+someone what hurts.
+
+---
+
+## 12. Where this leaves the project
+
+§9 said "accept the ceiling; the remaining levers are better labels or more
+data." §10 and §11 sharpen that considerably.
+
+The ceiling was never architectural, and it is not really label noise either.
+It is that **the question was badly posed.** "Does a physician think this cough
+sounds abnormal" is a target with κ=0.181 among physicians, independent of
+whether the participant is ill (§10.5), on a class balance that is an artifact
+of how raters behave (§10.4), scored partly by recording duration and gain
+(§10.1). No head, pooling shape, or trunk width addresses any of that.
+
+### 12.1 Direction
+
+1. **Move to the UK dataset and report the matched-split number.** Landing near
+   0.62 would *reproduce a government study* — a far stronger result than 0.72
+   on a benchmark we now know is confounded. Use `in_matched_rebalanced_*`.
+
+2. **Strip the shortcuts regardless of dataset.** Cough-burst segmentation,
+   per-clip normalisation, per-mel-bin normalisation. Without this we will
+   relearn duration and gain against a new target. §10.1 and §10.2 are the
+   specification.
+
+3. **Build what the evidence supports: symptoms plus audio.** §11.2 says the
+   symptom score is the strong component. The UK data ships a 14-symptom panel
+   alongside every recording. This is also the honest product — a screening aid
+   for someone who cannot see a doctor for weeks, not a diagnosis.
+
+### 12.2 Adventitious sound detection — the one architectural idea left
+
+Detect **crackles and wheezes** rather than classifying illness directly.
+
+The case for it is that it inverts every problem in §10. Crackle and wheeze are
+*acoustic events*, not inferences about a person — an annotator marks a sound
+that is either present in the waveform or is not. That makes the label far
+better defined than a diagnosis, and makes the detector much harder to confound
+with age, gender, or recording gain. The output is also interpretable: "a wheeze
+was detected at 2.1 s" is actionable in a way that "0.73 abnormal" is not.
+
+The obvious objection is that ICBHI — the only dataset with these labels — is
+stethoscope audio, and SickNote's entire premise is a phone and no equipment.
+But crackles and wheezes occur during **breathing**, and the UK dataset recorded
+**72,999 exhalations at 48 kHz** alongside the coughs. That is the bridge: the
+same physiological event ICBHI annotates, captured on the target hardware.
+
+And it can be validated without any crackle/wheeze labels on the UK audio:
+
+```
+self-reported asthma        8,249 yes / 64,567 no
+shortness of breath         7,813
+other respiratory condition 1,892
+```
+
+Wheeze is the defining sound of asthma. Train the detector on ICBHI, run it on
+UK exhalations, and test whether its wheeze score separates those 8,249. If it
+does, we have an interpretable acoustic feature that §10's confounds cannot
+explain. If it does not, we have learned the domain gap is fatal — in one
+experiment.
+
+**The risk is physical, not statistical.** A crackle is a 5–15 ms,
+low-amplitude transient. ICBHI captures it with a contact microphone pressed to
+the chest wall. Through air, at arm's length, into a phone, it may be *absent
+from the signal* rather than merely hard to detect. No model fixes a signal
+that is not there. That is precisely why the asthma-separation test should be
+run before any effort goes into the detector itself.
+
+Note on the audio metadata: `cough_snr` and `exhalation_snr` are provided but
+undefined in the open data dictionary, and sit at 0.2–0.4 across all three
+modalities. They are not decibels and should not be read as a noise estimate —
+compute SNR from the waveforms instead.
+
+### 12.3 What is now ruled out
+
+- **More head, pooling, or capacity work on COUGHVID.** Five of seven ideas
+  came back null in §4, and §10 explains why the remaining two were worth so
+  little.
+- **Soft or agreement-weighted labels.** Only 106 clips have more than one
+  rater (§10.3).
+- **Pretraining on COUGHVID's self-reported status.** κ=0.052 against the
+  target (§10.5) — it is a different task, not a related one.
+- **Cambridge and Virufy** as training data (§11).
