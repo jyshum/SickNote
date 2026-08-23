@@ -30,6 +30,18 @@ KERNEL_SIZE = 3
 HEAD = "pool_time"
 POOL = "sym"
 
+# Three members, not five. EXPERIMENTS.md section 4b measured the ensemble size
+# curve: members 4 and 5 are worth +0.0013 combined, well inside noise, for 40%
+# more inference cost and storage. These are the first three of the original
+# five, so the shipped ensemble is a strict subset of what came before.
+#
+# This lives in config rather than train.py because api/inference.py needs the
+# ensemble size, and model/train.py imports scikit-learn at module level --
+# which commit da1ac74 deliberately dropped from requirements.txt to cut ~150MB
+# off the API container. Importing train.py from the serving path would pass
+# locally and raise ModuleNotFoundError in production.
+ENSEMBLE_SEEDS = [42, 123, 456]
+
 # Evaluation
 #
 # Selected on the VALIDATION split under the MIN_SENSITIVITY policy below,

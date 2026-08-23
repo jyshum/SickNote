@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import roc_auc_score
 
 from model.config import (
+    ENSEMBLE_SEEDS,
     BATCH_SIZE, EPOCHS, LR, WEIGHT_DECAY,
     EARLY_STOPPING_PATIENCE, CHECKPOINT_DIR, DEVICE, HEAD, POOL,
 )
@@ -192,11 +193,6 @@ def train_single(seed=42, suffix="", head=HEAD, pool=POOL, specaug=True):
     return best_val_auc
 
 
-# Three, not five. EXPERIMENTS.md section 4b measured the ensemble size curve:
-# members 4 and 5 are worth +0.0013 combined, well inside noise, for 40% more
-# inference cost and storage. These are the first three of the original five,
-# so the shipped ensemble is a strict subset of what came before.
-ENSEMBLE_SEEDS = [42, 123, 456]
 
 
 def main():
