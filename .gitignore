@@ -39,3 +39,6 @@ model/checkpoints/cv/**/*.pt
 # already in history at 4b5a3ef, recoverable with
 #   git show 4b5a3ef:model/checkpoints/model_final_0.pt > restored.pt
 model/checkpoints/pre_pooling_head/
+
+# Claude Code local tooling (worktrees, launch configs)
+.claude/
