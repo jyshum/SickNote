@@ -27,4 +27,15 @@ frontend/.next/
 TRANSFER_LEARNING_PLAN.md
 docs/
 .superpowers/
-stats_experiment/
+.vercel
+.env*
+
+# Cross-validation fold checkpoints (110MB) — regenerate with `python -m model.crossval`.
+# The CSV/JSON results are kept, they are the evidence.
+model/checkpoints/cv/**/*.pt
+
+# Pre-pooling-head checkpoints, kept locally so the loader's rejection path can
+# be tested against a real stale file. Not committed: these exact weights are
+# already in history at 4b5a3ef, recoverable with
+#   git show 4b5a3ef:model/checkpoints/model_final_0.pt > restored.pt
+model/checkpoints/pre_pooling_head/

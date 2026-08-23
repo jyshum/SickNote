@@ -29,11 +29,13 @@ _CHECKPOINT_DIR = os.path.join(_PROJECT_ROOT, "model", "checkpoints")
 
 
 def _load_models():
-    """Load ensemble models (or single model_final.pt as fallback).
+    """Load the production ensemble, or refuse to start.
 
-    Checks for model_final_0.pt through model_final_4.pt first (ensemble).
-    Falls back to model_final.pt if no ensemble files exist.
-    Caches result in module-level globals so it only runs once.
+    Every failure here is raised rather than worked around. A screening tool
+    that quietly serves a different model than the one that was measured is
+    worse than one that will not start: the old code fell back to a single
+    model_final.pt, so a stale checkpoint or a half-copied deploy would run
+    and answer confidently. Caches into module globals so this runs once.
     """
     global _models, _params
 
@@ -41,6 +43,15 @@ def _load_models():
         return _models, _params
 
     from model.architecture import SickNoteCNN
+    from model.config import ENSEMBLE_SEEDS, HEAD as _HEAD, POOL as _POOL
+
+    # Read from model.config, never from model.train: train.py imports
+    # scikit-learn at module level, and commit da1ac74 deliberately dropped it
+    # from requirements.txt to cut ~150MB off the API container. Importing
+    # train.py here would pass locally, where sklearn happens to be in the dev
+    # venv, and raise ModuleNotFoundError on every prediction in production.
+    # config.py imports only torch, so it is safe from the serving path.
+    expected = len(ENSEMBLE_SEEDS)
 
     params_path = os.path.join(_CHECKPOINT_DIR, "preprocessing_params.pt")
     params = torch.load(params_path, weights_only=True, map_location="cpu")
@@ -48,23 +59,50 @@ def _load_models():
     n_mels = params["n_mels"]
     time_frames = params["time_frames"]
 
-    # Try loading ensemble members
-    models = []
-    for i in range(5):
-        path = os.path.join(_CHECKPOINT_DIR, f"model_final_{i}.pt")
-        if os.path.exists(path):
-            model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
-            model.load_state_dict(torch.load(path, weights_only=True, map_location="cpu"))
-            model.eval()
-            models.append(model)
+    found = [
+        i for i in range(expected)
+        if os.path.exists(os.path.join(_CHECKPOINT_DIR, f"model_final_{i}.pt"))
+    ]
+    if not found:
+        raise RuntimeError(
+            f"no ensemble checkpoints in {_CHECKPOINT_DIR} — expected "
+            f"model_final_0.pt through model_final_{expected - 1}.pt. "
+            f"Train them with: PYTORCH_ENABLE_MPS_FALLBACK=1 PYTHONPATH=. "
+            f"python -m model.train --ensemble"
+        )
 
-    # Fallback to single model
-    if not models:
-        single_path = os.path.join(_CHECKPOINT_DIR, "model_final.pt")
-        model = SickNoteCNN(n_mels=n_mels, time_frames=time_frames)
-        model.load_state_dict(torch.load(single_path, weights_only=True, map_location="cpu"))
+    # The count is deliberately checked AFTER the load loop. An architecture
+    # mismatch on a checkpoint that is present is a more specific and more
+    # actionable error than "wrong number of files", so when both are true the
+    # mismatch wins.
+    models = []
+    for i in found:
+        path = os.path.join(_CHECKPOINT_DIR, f"model_final_{i}.pt")
+        model = SickNoteCNN(
+            n_mels=n_mels, time_frames=time_frames, head=_HEAD, pool=_POOL
+        )
+        try:
+            model.load_state_dict(
+                torch.load(path, weights_only=True, map_location="cpu")
+            )
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"{os.path.basename(path)} does not match the "
+                f"head={_HEAD!r} pool={_POOL!r} architecture this build "
+                f"expects. It is probably a checkpoint from before the "
+                f"pooling head landed — retrain with "
+                f"`python -m model.train --ensemble`. Original error: {e}"
+            ) from e
         model.eval()
         models.append(model)
+
+    if len(models) != expected:
+        raise RuntimeError(
+            f"partial ensemble: loaded {len(models)} of {expected} members "
+            f"from {_CHECKPOINT_DIR} (present: {found}). Averaging a partial "
+            f"ensemble would not be the model that was measured — retrain "
+            f"with `python -m model.train --ensemble`."
+        )
 
     _models = models
     _params = params
