@@ -1,0 +1,52 @@
+STATS EXPERIMENT — ANALYSIS SUMMARY
+====================================
+
+DESCRIPTIVE STATISTICS
+  n = 50
+  Mean AUC-ROC = 0.6135
+  Median AUC-ROC = 0.6157
+  Std Dev = 0.0231
+  Min = 0.5509, Q1 = 0.6059, Median = 0.6157, Q3 = 0.6288, Max = 0.6609
+
+GROUP MEANS (by training size)
+  200: mean=0.5899, std=0.0315
+  400: mean=0.5998, std=0.0221
+  600: mean=0.5911, std=0.0254
+  800: mean=0.6116, std=0.0220
+  1000: mean=0.6170, std=0.0095
+  1200: mean=0.6139, std=0.0057
+  1400: mean=0.6297, std=0.0144
+  1600: mean=0.6132, std=0.0106
+  1800: mean=0.6322, std=0.0100
+  1900: mean=0.6368, std=0.0186
+
+REGRESSION (raw training_size)
+  Equation: ŷ = 0.586107 + 0.00002515x
+  r = 0.6162
+  r² = 0.3797
+  b₁ (slope) = 0.00002515
+  SE(b₁) = 0.00000464
+  t = b₁ / SE(b₁) = 0.00002515 / 0.00000464 = 5.4204
+  df = 48
+  p-value (one-sided) = 0.0000
+
+HYPOTHESIS TEST
+  H₀: β₁ = 0
+  Hₐ: β₁ > 0
+  α = 0.05
+  Decision: Reject H₀
+
+  At the α = 0.05 significance level, there is sufficient
+  evidence to conclude that there is a positive linear relationship
+  between training set size and validation AUC-ROC for CNN models trained
+  on COUGHVID cough audio spectrograms.
+
+REGRESSION (log-transformed)
+  Equation: ŷ = 0.479463 + 0.01970426·ln(x)
+  r = 0.5952
+  r² = 0.3543
+  b₁ = 0.01970426
+  SE(b₁) = 0.00383982
+  t = 5.1316
+  df = 48
+  p-value (one-sided) = 0.0000
