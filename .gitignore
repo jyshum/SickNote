@@ -42,3 +42,6 @@ model/checkpoints/pre_pooling_head/
 
 # Claude Code local tooling (worktrees, launch configs)
 .claude/
+
+# Generated Hugging Face Space staging directory
+build/
