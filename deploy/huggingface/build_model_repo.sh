@@ -109,6 +109,8 @@ if __name__ == "__main__":
     print(f"label: {'abnormal' if prob >= 0.46 else 'healthy'}")
 PY
 
+printf '__pycache__/\n*.pyc\n' > "$OUT/.gitignore"
+
 echo "assembled: $OUT"
 echo "  size: $(du -sh "$OUT" | cut -f1)"
 find "$OUT" -type f | sed "s|$OUT|  .|"
