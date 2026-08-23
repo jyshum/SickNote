@@ -108,7 +108,7 @@ export default function TechnicalPage() {
               SickNote is a binary cough classifier that distinguishes healthy
               coughs from abnormal ones. It converts audio recordings into mel
               spectrograms — visual representations of sound frequencies — and
-              feeds them through an ensemble of five convolutional neural
+              feeds them through an ensemble of three convolutional neural
               networks. Each prediction includes a Grad-CAM heatmap showing
               which spectrogram regions drove the result.
             </p>
@@ -131,7 +131,7 @@ export default function TechnicalPage() {
               {[
                 { value: "34,400", label: "Total recordings" },
                 { value: "2,841", label: "Expert-labeled" },
-                { value: "~2,300", label: "After filtering" },
+                { value: "2,267", label: "After filtering" },
               ].map((s) => (
                 <div
                   key={s.label}
@@ -231,10 +231,13 @@ export default function TechnicalPage() {
               </h2>
             </div>
             <p data-item className="mb-5 max-w-3xl text-base leading-7 text-slate-600">
-              A small convolutional neural network trained from scratch. Five
-              models are trained with different random seeds and their
-              predictions are averaged for robustness. Each result includes a
-              Grad-CAM heatmap showing which spectrogram regions influenced the
+              A small convolutional neural network trained from scratch, 71,793
+              parameters per model. Three models are trained with different
+              random seeds and their predictions are averaged. Conv features are
+              pooled over the time axis only — never over frequency, since 200 Hz
+              and 2 kHz are genuinely different sounds while a cough at 2s and a
+              cough at 5s are the same cough. Each result includes a Grad-CAM
+              heatmap showing which spectrogram regions influenced the
               classification.
             </p>
             <div
@@ -281,7 +284,7 @@ export default function TechnicalPage() {
                 {
                   icon: Layers,
                   title: "Ensemble",
-                  desc: "5 models, different seeds, averaged probabilities",
+                  desc: "3 models, different seeds, averaged probabilities",
                 },
                 {
                   icon: ScanEye,
@@ -331,16 +334,17 @@ export default function TechnicalPage() {
                       Actual
                     </th>
                     <th className="px-5 py-3.5 text-left font-bold text-slate-800">
-                      Target
+                      Reference
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    { metric: "AUC-ROC", actual: "0.73", target: "> 0.82", note: "" },
-                    { metric: "Accuracy", actual: "76%", target: "> 78%", note: "" },
-                    { metric: "Sensitivity", actual: "0.68", target: "> 0.75", note: "" },
-                    { metric: "Specificity", actual: "0.77", target: "> 0.70", note: "" },
+                    { metric: "AUC-ROC", actual: "0.7238", target: "0.6556 from clip duration and loudness alone", note: "" },
+                    { metric: "Improvement over previous", actual: "+0.0308", target: "95% CI [+0.0137, +0.0494], better on 5 of 5 folds", note: "" },
+                    { metric: "Sensitivity", actual: "0.8029", target: "policy floor is 0.80", note: "" },
+                    { metric: "Specificity", actual: "0.5054", target: "at the same operating point", note: "" },
+                    { metric: "Rater agreement", actual: "\u03ba 0.181", target: "four physicians on the same audio \u2014 the ceiling", note: "" },
                   ].map((row) => (
                     <tr
                       key={row.metric}
@@ -366,10 +370,13 @@ export default function TechnicalPage() {
               </table>
             </div>
             <p data-item className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
-              Classification threshold optimized from 0.50 to 0.52 using
-              Youden&apos;s J statistic to balance sensitivity and specificity.
-              Metrics reported on the held-out test set (15% of data, never seen
-              during training).
+              Classification threshold is 0.46, selected on the validation split
+              under a stated policy: catch at least 80% of abnormal coughs, then
+              take the best specificity available. An earlier version shipped 0.52,
+              which was the argmax of Youden&apos;s J computed on the test set — a
+              value fitted to the data it was then reported on. Figures above come
+              from nested 5-fold cross-validation, in which all 2,267 clips are
+              scored by a model that never trained on them.
             </p>
           </section>
 
@@ -391,7 +398,7 @@ export default function TechnicalPage() {
                 All COUGHVID recordings are voluntary intentional coughs
               </li>
               <li>
-                ~2,300 expert-labeled samples, split into ~1,600 for training —
+                2,267 expert-labeled samples, split into ~1,600 for training —
                 small by production ML standards
               </li>
               <li>
@@ -443,7 +450,7 @@ export default function TechnicalPage() {
               {
                 category: "Architecture",
                 title: "Why we built a CNN from scratch",
-                body: "With only ~2,300 expert-labeled samples, a small 3-layer CNN with aggressive dropout (0.5) and reduced channel widths [8, 16, 32] was the right fit. Larger architectures overfit before learning useful features. We tuned every hyperparameter against real dataset statistics from explore.py before writing a single training loop.",
+                body: "With only 2,267 expert-labeled samples, a small 3-layer CNN with aggressive dropout (0.5) and reduced channel widths [8, 16, 32] was the right fit. Larger architectures overfit before learning useful features. We tuned every hyperparameter against real dataset statistics from explore.py before writing a single training loop.",
               },
               {
                 category: "Training",
@@ -452,13 +459,13 @@ export default function TechnicalPage() {
               },
               {
                 category: "Data",
-                title: "Why data augmentation didn't help",
-                body: "Standard audio augmentation (noise injection, time stretching) on a dataset this small amplified noise rather than adding signal. The augmented samples were too similar to the originals to provide new information, and synthetic noise patterns confused the model. We removed augmentation entirely and kept the raw expert-labeled data.",
+                title: "Why waveform augmentation failed but masking works",
+                body: "Standard audio augmentation (noise injection, time stretching) on a dataset this small amplified noise rather than adding signal, and we dropped it. SpecAugment is different and we kept it: it blanks random frequency bands and time windows in the spectrogram rather than distorting the audio, so whatever survives the mask is untouched real recording. It cut seed-to-seed standard deviation from 0.0078 to 0.0025, making single models roughly three times more reproducible.",
               },
               {
                 category: "Training",
-                title: "Why ensemble + threshold tuning",
-                body: "Instead of relying on a single model's opinion, we train five models with different random seeds and average their predictions. This smooths out the variance inherent to our small dataset. We then optimized the classification threshold from 0.50 to 0.52 using Youden's J statistic, which maximizes the balance between sensitivity (catching abnormal coughs) and specificity (correctly identifying healthy ones).",
+                title: "Why three models, and why this threshold",
+                body: "We train three models with different random seeds and average them, which smooths the variance of a small dataset. Three rather than five because we measured the size curve: members four and five are worth +0.0013 combined, well inside noise, for 40% more inference cost. The threshold is 0.46, chosen on the validation split under a stated policy — catch at least 80% of abnormal coughs, then take the best specificity available. Maximising Youden's J would weight a missed illness the same as a false alarm, which is the wrong tradeoff for a screening tool.",
               },
             ].map((decision) => (
               <div
