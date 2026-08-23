@@ -49,8 +49,14 @@ ENSEMBLE_SEEDS = [42, 123, 456]
 # computed on the test set — see EXPERIMENTS.md section 3.
 #
 # Regenerate with:  PYTHONPATH=. python -m model.derive_threshold
-# Derived: PENDING — Task 5 replaces this after the ensemble is trained.
-THRESHOLD = 0.50
+# Derived: 2026-08-22, 3-member pool_time ensemble, on the 340-clip validation
+# split — sensitivity 0.8192, specificity 0.3913, val AUC 0.6730.
+#
+# The specificity is lower than the 0.4881 EXPERIMENTS.md section 5 reports for
+# this configuration. That is expected and not a regression: section 5 is
+# seed-averaged over 2,267 out-of-fold clips, this is one 340-clip split, and
+# section 1 measured a 0.09 AUC swing from split assignment alone at this size.
+THRESHOLD = 0.46
 
 # Cross-validation (model/crossval.py)
 N_FOLDS = 5
