@@ -1,17 +1,34 @@
-# SickNote
+<p align="center">
+  <img src="docs/banner.png" alt="SickNote" width="480">
+</p>
 
-**Binary cough classifier: healthy vs. abnormal**
+<p align="center">
+  <b>Binary cough classifier: healthy vs. abnormal.</b><br>
+  XdHacks Mini Vancouver 2026 · 3rd Place
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/SuJD9Y44TfE"><b>▶ Watch the demo (YouTube)</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://www.sicknoteinc.xyz/"><b>Try it live</b></a>
+</p>
+
+<p align="center">
+  <a href="#results">Results</a> ·
+  <a href="#the-model">The model</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#key-design-decisions">Trade-offs</a> ·
+  <a href="#development">Run it</a>
+</p>
+
+---
+
+## What it is
 
 SickNote analyzes a cough recording and returns whether it sounds healthy or abnormal, alongside a Grad-CAM heatmap showing which parts of the spectrogram drove the decision. Audio is converted to a log-mel spectrogram and scored by an ensemble of three small CNNs.
 
 > **Screening support only. Does not replace medical diagnosis.**
 > Read [Results](#results) and [What this model actually measures](#what-this-model-actually-measures) before trusting a prediction.
-
-## Awards
-
-**3rd Place** — [XdHacks Mini Vancouver](http://xdhacksvan.com/vancouver/) Hackathon (2026)
-
----
 
 ## Results
 
