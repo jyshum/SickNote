@@ -8,6 +8,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/Python-326C98?style=flat-square&amp;logo=python&amp;logoColor=white"></a>
+  <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white"></a>
+  <a href="https://developer.mozilla.org/en-US/docs/Web/CSS"><img alt="CSS" src="https://img.shields.io/badge/CSS-663399?style=flat-square&amp;logo=css&amp;logoColor=white"></a>
+</p>
+
+<p align="center">
   <a href="https://youtu.be/SuJD9Y44TfE"><b>▶ Watch the demo (YouTube)</b></a>
   &nbsp;·&nbsp;
   <a href="https://www.sicknoteinc.xyz/"><b>Try it live</b></a>
