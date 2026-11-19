@@ -9,8 +9,18 @@
 
 <p align="center">
   <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/Python-326C98?style=flat-square&amp;logo=python&amp;logoColor=white"></a>
+  <a href="https://pytorch.org/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-B83C24?style=flat-square&amp;logo=pytorch&amp;logoColor=white"></a>
+  <a href="https://docs.pytorch.org/audio/stable/"><img alt="TorchAudio" src="https://img.shields.io/badge/TorchAudio-993B29?style=flat-square"></a>
+  <a href="https://ffmpeg.org/"><img alt="FFmpeg" src="https://img.shields.io/badge/FFmpeg-337226?style=flat-square&amp;logo=ffmpeg&amp;logoColor=white"></a>
+  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-007D71?style=flat-square&amp;logo=fastapi&amp;logoColor=white"></a>
+  <br>
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white"></a>
-  <a href="https://developer.mozilla.org/en-US/docs/Web/CSS"><img alt="CSS" src="https://img.shields.io/badge/CSS-663399?style=flat-square&amp;logo=css&amp;logoColor=white"></a>
+  <a href="https://nextjs.org/"><img alt="Next.js" src="https://img.shields.io/badge/Next.js-222222?style=flat-square&amp;logo=nextdotjs&amp;logoColor=white"></a>
+  <a href="https://react.dev/"><img alt="React" src="https://img.shields.io/badge/React-136880?style=flat-square&amp;logo=react&amp;logoColor=white"></a>
+  <a href="https://tailwindcss.com/"><img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind%20CSS-126B86?style=flat-square&amp;logo=tailwindcss&amp;logoColor=white"></a>
+  <a href="https://www.docker.com/"><img alt="Docker" src="https://img.shields.io/badge/Docker-1766BC?style=flat-square&amp;logo=docker&amp;logoColor=white"></a>
+  <a href="https://railway.com/"><img alt="Railway" src="https://img.shields.io/badge/Railway-7047AE?style=flat-square&amp;logo=railway&amp;logoColor=white"></a>
+  <a href="https://vercel.com/"><img alt="Vercel" src="https://img.shields.io/badge/Vercel-292929?style=flat-square&amp;logo=vercel&amp;logoColor=white"></a>
 </p>
 
 <p align="center">
